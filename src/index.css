@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-primary: var(--border-primary);
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-profit-primary: var(--profit-color);
+}
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border-primary: #e2e8f0;
+  --accent-primary: #06b6d4;
+  --accent-secondary: #a855f7;
+  --profit-color: #10b981;
+}
+
+.dark {
+  --bg-primary: #020617;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-primary: #1e293b;
+  --accent-primary: #06b6d4;
+  --accent-secondary: #a855f7;
+  --profit-color: #10b981;
+}
+
+.kahve {
+  --bg-primary: #FAF7F2;
+  --bg-secondary: #F2EBE1;
+  --bg-tertiary: #E8DFD3;
+  --text-primary: #3E2723;
+  --text-secondary: #795548;
+  --border-primary: #DED0C1;
+  --accent-primary: #A34324;
+  --accent-secondary: #A34324;
+  --profit-color: #A3B18A;
+}
+
+.yesil {
+  --bg-primary: #F0F4F1;
+  --bg-secondary: #E2EBE4;
+  --bg-tertiary: #D5E0D8;
+  --text-primary: #064E3B;
+  --text-secondary: #166534;
+  --border-primary: #C8D6CC;
+  --accent-primary: #047857;
+  --accent-secondary: #047857;
+  --profit-color: #047857;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-primary text-text-primary transition-colors duration-300;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 10px;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
