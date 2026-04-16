@@ -32,6 +32,7 @@ The AI Analysis module uses the `gemini-3-flash-preview` model to process your p
 - **Recommendations**: Actionable steps to optimize your investments.
 - **Risk Level**: An assessment of your current exposure (Low, Medium, High).
 - **Performance Assessment**: A brief review of your P/L and return metrics.
+- **Preview testi yapılıyor**
 
 ---
 Netfoy © 2024 • Smart Investing for Everyone
