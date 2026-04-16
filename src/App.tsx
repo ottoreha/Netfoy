@@ -231,7 +231,6 @@ export default function App() {
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'PORTFOLIO' | 'ANALYSIS'>('PORTFOLIO');
-  const [chartView, setChartView] = useState<'ASSET' | 'TYPE'>('ASSET');
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('netfoy_language');
     return (saved as Language) || 'tr';
@@ -490,10 +489,12 @@ export default function App() {
 
   const handleAddInvestment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quantity || !purchasePrice || !purchaseDate) {
+    if (!quantity || (assetType !== 'TRY' && !purchasePrice) || !purchaseDate) {
       toast.error(t.fillAllFields);
       return;
     }
+
+    const finalPurchasePrice = assetType === 'TRY' ? 1 : parseFloat(purchasePrice);
 
     const category: AssetCategory = 
       ['TRY', 'USD', 'EUR', 'GBP', 'CHF'].includes(assetType) ? 'FIAT' :
@@ -504,7 +505,7 @@ export default function App() {
         if (asset.id === editingAssetId) {
           const newHistory = (asset.history || []).map(p => 
             p.id === editingPurchaseId 
-              ? { ...p, purchaseDate, purchasePriceTRY: parseFloat(purchasePrice), quantity: parseFloat(quantity) }
+              ? { ...p, purchaseDate, purchasePriceTRY: finalPurchasePrice, quantity: parseFloat(quantity) }
               : p
           );
           return { ...asset, history: newHistory };
@@ -516,7 +517,7 @@ export default function App() {
       const newPurchase: Purchase = {
         id: crypto.randomUUID(),
         purchaseDate,
-        purchasePriceTRY: parseFloat(purchasePrice),
+        purchasePriceTRY: finalPurchasePrice,
         quantity: parseFloat(quantity),
         createdAt: Date.now(),
       };
@@ -656,32 +657,16 @@ export default function App() {
   }, [theme]);
 
   const chartData = useMemo(() => {
-    if (chartView === 'ASSET') {
-      const total = portfolioStats.assetDetails.reduce((sum, a) => sum + a.value, 0);
-      return portfolioStats.assetDetails
-        .map(asset => ({
-          name: getAssetDisplayName(asset.assetType, (asset as any).name),
-          value: asset.value,
-          percentage: total > 0 ? (asset.value / total) * 100 : 0
-        }))
-        .filter(item => item.value > 0)
-        .sort((a, b) => b.value - a.value);
-    } else {
-      const assets = portfolioStats.assetDetails.filter(a => a.entryType === 'asset').reduce((sum, a) => sum + a.value, 0);
-      const debts = portfolioStats.assetDetails.filter(a => a.entryType === 'debt').reduce((sum, a) => sum + a.value, 0);
-      const receivables = portfolioStats.assetDetails.filter(a => a.entryType === 'receivable').reduce((sum, a) => sum + a.value, 0);
-      const total = assets + debts + receivables;
-
-      return [
-        { name: t.assets, value: assets, color: theme === 'kahve' ? '#A34324' : theme === 'yesil' ? '#047857' : '#06b6d4' },
-        { name: t.debt, value: debts, color: '#ef4444' },
-        { name: t.receivable, value: receivables, color: '#3b82f6' }
-      ].filter(item => item.value > 0).map(item => ({
-        ...item,
-        percentage: total > 0 ? (item.value / total) * 100 : 0
-      }));
-    }
-  }, [portfolioStats.assetDetails, chartView, t, theme]);
+    const total = portfolioStats.assetDetails.reduce((sum, a) => sum + a.value, 0);
+    return portfolioStats.assetDetails
+      .map(asset => ({
+        name: getAssetDisplayName(asset.assetType, (asset as any).name),
+        value: asset.value,
+        percentage: total > 0 ? (asset.value / total) * 100 : 0
+      }))
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [portfolioStats.assetDetails, t, theme]);
 
   const sortedAssets = useMemo(() => {
     const filtered = portfolioStats.assetDetails.filter(asset => categoryFilter === 'ALL' || asset.category === categoryFilter);
@@ -1178,26 +1163,6 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <Activity size={16} className="text-accent-primary" />
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-text-secondary">{t.distribution}</h3>
-                  </div>
-                  <div className="flex p-1 bg-bg-tertiary/50 rounded-xl border border-border-primary">
-                    <button
-                      onClick={() => setChartView('ASSET')}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                        chartView === 'ASSET' ? "bg-accent-primary text-white shadow-lg shadow-accent-primary/20" : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      {t.assets}
-                    </button>
-                    <button
-                      onClick={() => setChartView('TYPE')}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                        chartView === 'TYPE' ? "bg-accent-primary text-white shadow-lg shadow-accent-primary/20" : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      {language === 'tr' ? 'Tür' : 'Type'}
-                    </button>
                   </div>
                 </div>
 
@@ -1745,18 +1710,24 @@ export default function App() {
                         <p className="text-text-primary opacity-80 leading-relaxed text-sm md:text-base">{analysis.performans}</p>
                       </div>
                     </div>
-                    <div className="space-y-6">
-                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <div className="w-1 h-3 bg-accent-primary rounded-full" />
+                    <div className="bg-bg-tertiary/30 rounded-3xl p-5 md:p-6 border border-border-primary/50 shadow-sm h-full flex flex-col">
+                      <h4 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-2 flex items-center gap-3">
+                        <div className="w-8 h-8 bg-accent-primary/10 rounded-xl flex items-center justify-center shrink-0 border border-accent-primary/20 shadow-inner">
+                          <Lightbulb size={16} className="text-accent-primary" />
+                        </div>
                         {t.aiRecommendations}
                       </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col mt-2">
                         {analysis.tavsiyeler.map((rec, i) => (
-                          <div key={i} className="flex flex-col gap-3 text-sm md:text-base text-text-primary bg-bg-tertiary/40 border border-border-primary/50 shadow-sm p-5 rounded-3xl hover:border-accent-primary/30 hover:shadow-md hover:bg-bg-tertiary/80 transition-all group h-auto break-words whitespace-normal">
-                            <div className="w-10 h-10 bg-accent-primary/10 rounded-2xl flex items-center justify-center shrink-0 border border-accent-primary/20 shadow-inner group-hover:scale-110 transition-transform">
-                              <Lightbulb size={20} className="text-accent-primary" />
-                            </div>
-                            <p className="leading-relaxed opacity-90">{rec}</p>
+                          <div 
+                            key={i} 
+                            className={cn(
+                              "flex items-start gap-4 py-4 text-sm md:text-base text-text-primary opacity-80",
+                              i !== analysis.tavsiyeler.length - 1 ? "border-b border-border-primary/50" : "pb-0"
+                            )}
+                          >
+                            <div className="mt-2 w-1.5 h-1.5 bg-accent-primary rounded-full shrink-0 shadow-[0_0_8px_rgba(var(--accent-primary),0.8)]" />
+                            <p className="leading-relaxed break-words whitespace-normal">{rec}</p>
                           </div>
                         ))}
                       </div>
@@ -1929,29 +1900,33 @@ export default function App() {
                       </div>
                     </div>
 
-                    <StepperInput 
-                      label={t.purchasePriceTry}
-                      value={purchasePrice}
-                      onChange={setPurchasePrice}
-                      step={100}
-                      min={0}
-                      placeholder="0.00"
-                    />
+                    {assetType !== 'TRY' && (
+                      <>
+                        <StepperInput 
+                          label={t.purchasePriceTry}
+                          value={purchasePrice}
+                          onChange={setPurchasePrice}
+                          step={100}
+                          min={0}
+                          placeholder="0.00"
+                        />
 
-                    {currentLivePrice > 0 && assetType !== 'TRY' && (
-                      <div className="flex items-center justify-between px-1 -mt-5">
-                        <p className="text-sm text-text-secondary font-medium">
-                          {t.currentPrice}: <span className="text-text-primary font-bold">{formatCurrency(currentLivePrice)}</span>
-                        </p>
-                        <button 
-                          type="button"
-                          onClick={() => setPurchasePrice(currentLivePrice.toFixed(2))}
-                          className="text-[10px] text-accent-primary hover:text-accent-primary/80 font-bold uppercase tracking-wider transition-colors flex items-center gap-1"
-                        >
-                          <TrendingDown size={10} className="rotate-180" />
-                          {t.useThis}
-                        </button>
-                      </div>
+                        {currentLivePrice > 0 && (
+                          <div className="flex items-center justify-between px-1 -mt-5 mb-2">
+                            <p className="text-sm text-text-secondary font-medium">
+                              {t.currentPrice}: <span className="text-text-primary font-bold">{formatCurrency(currentLivePrice)}</span>
+                            </p>
+                            <button 
+                              type="button"
+                              onClick={() => setPurchasePrice(currentLivePrice.toFixed(2))}
+                              className="text-[10px] text-accent-primary hover:text-accent-primary/80 font-bold uppercase tracking-wider transition-colors flex items-center gap-1"
+                            >
+                              <TrendingDown size={10} className="rotate-180" />
+                              {t.useThis}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     <div className="space-y-2">
