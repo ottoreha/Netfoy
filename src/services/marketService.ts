@@ -15,6 +15,10 @@ const EXCHANGERATE_API = 'https://open.er-api.com/v6/latest/USD';
 // 1 Troy Ounce = 31.1034768 Grams
 const TROY_OUNCE = 31.1034768;
 
+const CACHE_KEY = 'netfoy_market_cache';
+const TIMESTAMP_KEY = 'last_fetch_timestamp';
+const CACHE_DURATION = 3 * 60 * 60 * 1000; // 3 hours (10,800,000 ms)
+
 export interface MarketData {
   prices: Record<AssetType, number>;
   timestamp: number;
@@ -24,35 +28,35 @@ export interface MarketData {
 
 // Fallback values in case APIs are completely unreachable
 const FALLBACK_PRICES: Record<AssetType, number> = {
-  USD: 32.5,
-  EUR: 35.2,
-  GBP: 41.1,
-  CHF: 36.5,
-  JPY: 0.21,
-  CAD: 24.1,
-  AUD: 21.5,
-  NOK: 3.1,
-  SEK: 3.1,
-  DKK: 4.7,
+  USD: 44.75,
+  EUR: 52.80,
+  GBP: 60.70,
+  CHF: 51.5,
+  JPY: 0.28,
+  CAD: 32.5,
+  AUD: 30.2,
+  NOK: 4.1,
+  SEK: 4.2,
+  DKK: 7.1,
   XAU: 2350,
   XAG: 28,
   XPT: 1050,
   XPD: 950,
   XCU: 0.3,
-  HAS_GOLD: 2450,
-  GRAM_GOLD: 2450,
-  '22K_GOLD': 2250,
-  '14K_GOLD': 1450,
-  QUARTER_GOLD: 4050,
-  HALF_GOLD: 8100,
-  FULL_GOLD: 16200,
-  REPUBLIC_GOLD: 16800,
-  GREMSE_GOLD: 40500,
-  RESAT_GOLD: 16800,
-  SILVER_GRAM: 30,
-  PLATINUM_GRAM: 1100,
-  PALLADIUM_GRAM: 1000,
-  COPPER_GRAM: 0.3,
+  HAS_GOLD: 6931.00,
+  GRAM_GOLD: 6931.00,
+  '22K_GOLD': 6350.00,
+  '14K_GOLD': 4050.00,
+  QUARTER_GOLD: 11408.00,
+  HALF_GOLD: 22816.00,
+  FULL_GOLD: 45632.00,
+  REPUBLIC_GOLD: 46500.00,
+  GREMSE_GOLD: 114080.00,
+  RESAT_GOLD: 46500.00,
+  SILVER_GRAM: 114.50,
+  PLATINUM_GRAM: 1500,
+  PALLADIUM_GRAM: 1350,
+  COPPER_GRAM: 0.4,
 };
 
 /**
@@ -118,6 +122,28 @@ export async function fetchMarketPrices(): Promise<MarketData> {
   let source = 'CANLI PİYASA';
   let isFallback = false;
 
+  // 0. Check Cache First
+  const cached = localStorage.getItem(CACHE_KEY);
+  const lastFetch = localStorage.getItem(TIMESTAMP_KEY);
+  
+  if (cached && lastFetch) {
+    try {
+      const parsed = JSON.parse(cached) as MarketData;
+      const lastFetchTime = parseInt(lastFetch);
+      const age = Date.now() - lastFetchTime;
+      
+      if (age < CACHE_DURATION) {
+        console.log(`[MarketService] Data loaded from cache (${Math.round(age / 60000)}m old). Next API fetch in ${Math.round((CACHE_DURATION - age) / 60000)}m.`);
+        return {
+          ...parsed,
+          source: parsed.source + ' (CACHED)'
+        };
+      }
+    } catch (e) {
+      console.warn('[MarketService] Cache parse error');
+    }
+  }
+
   try {
     let usdTry = FALLBACK_PRICES.USD;
     let rates: Record<string, number> = {};
@@ -131,8 +157,15 @@ export async function fetchMarketPrices(): Promise<MarketData> {
         const curData = await curRes.json();
         if (curData.success && curData.result) {
           curData.result.forEach((item: any) => {
-            if (item.name === 'USD') usdTry = parseFloat(item.selling || item.buying);
-            rates[item.name] = parseFloat(item.selling || item.buying);
+            const price = parseFloat(item.selling || item.buying);
+            if (item.name === 'USD' || item.code === 'USD') {
+              usdTry = price;
+              rates['USD'] = price;
+            }
+            if (item.name === 'EUR' || item.code === 'EUR') {
+              rates['EUR'] = price;
+            }
+            rates[item.code || item.name] = price;
           });
         }
       } catch (e) {
@@ -147,7 +180,11 @@ export async function fetchMarketPrices(): Promise<MarketData> {
         const erData = await erRes.json();
         if (erData.rates && erData.rates.TRY) {
           usdTry = erData.rates.TRY;
-          rates = erData.rates;
+          // For ExchangeRate-API, rates are relative to USD
+          // So we need to convert them to TRY
+          Object.keys(erData.rates).forEach(code => {
+            rates[code] = usdTry / erData.rates[code];
+          });
           source = 'CANLI PİYASA (EXCHANGERATE)';
         }
       } catch (e) {
@@ -209,15 +246,15 @@ export async function fetchMarketPrices(): Promise<MarketData> {
     // Final Price Mapping
     const prices: Record<AssetType, number> = {
       USD: usdTry,
-      EUR: usdTry / (rates.EUR || (usdTry / FALLBACK_PRICES.EUR)),
-      GBP: usdTry / (rates.GBP || (usdTry / FALLBACK_PRICES.GBP)),
-      CHF: usdTry / (rates.CHF || (usdTry / FALLBACK_PRICES.CHF)),
-      JPY: usdTry / (rates.JPY || (usdTry / FALLBACK_PRICES.JPY)),
-      CAD: usdTry / (rates.CAD || (usdTry / FALLBACK_PRICES.CAD)),
-      AUD: usdTry / (rates.AUD || (usdTry / FALLBACK_PRICES.AUD)),
-      NOK: usdTry / (rates.NOK || (usdTry / FALLBACK_PRICES.NOK)),
-      SEK: usdTry / (rates.SEK || (usdTry / FALLBACK_PRICES.SEK)),
-      DKK: usdTry / (rates.DKK || (usdTry / FALLBACK_PRICES.DKK)),
+      EUR: rates.EUR || (usdTry / (rates.EUR_USD || (usdTry / FALLBACK_PRICES.EUR))),
+      GBP: rates.GBP || (usdTry / (rates.GBP_USD || (usdTry / FALLBACK_PRICES.GBP))),
+      CHF: rates.CHF || (usdTry / (rates.CHF_USD || (usdTry / FALLBACK_PRICES.CHF))),
+      JPY: rates.JPY || (usdTry / (rates.JPY_USD || (usdTry / FALLBACK_PRICES.JPY))),
+      CAD: rates.CAD || (usdTry / (rates.CAD_USD || (usdTry / FALLBACK_PRICES.CAD))),
+      AUD: rates.AUD || (usdTry / (rates.AUD_USD || (usdTry / FALLBACK_PRICES.AUD))),
+      NOK: rates.NOK || (usdTry / (rates.NOK_USD || (usdTry / FALLBACK_PRICES.NOK))),
+      SEK: rates.SEK || (usdTry / (rates.SEK_USD || (usdTry / FALLBACK_PRICES.SEK))),
+      DKK: rates.DKK || (usdTry / (rates.DKK_USD || (usdTry / FALLBACK_PRICES.DKK))),
       
       // Commodities
       XAU: goldPrices['GRAM_GOLD'] || (FALLBACK_PRICES.XAU / TROY_OUNCE) * usdTry,
@@ -244,14 +281,37 @@ export async function fetchMarketPrices(): Promise<MarketData> {
       COPPER_GRAM: (FALLBACK_PRICES.XCU / TROY_OUNCE) * usdTry,
     };
 
-    return {
+    const result: MarketData = {
       prices,
       timestamp: Date.now(),
       isFallback: false,
       source
     };
+
+    // Save to Cache
+    console.log(`[MarketService] Data fetched from API successfully at ${new Date().toLocaleTimeString()}`);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(result));
+    localStorage.setItem(TIMESTAMP_KEY, Date.now().toString());
+
+    return result;
   } catch (error) {
     console.error('Critical Market Service Error:', error);
+    
+    // Safety Net: Try to return expired cache first
+    const expiredCache = localStorage.getItem(CACHE_KEY);
+    if (expiredCache) {
+      try {
+        const parsed = JSON.parse(expiredCache) as MarketData;
+        console.warn('API fetch failed. Using expired cache as safety net.');
+        return {
+          ...parsed,
+          isFallback: true,
+          source: parsed.source + ' (EXPIRED CACHE)'
+        };
+      } catch (e) {}
+    }
+
+    console.warn('API fetch failed. Using April 2026 fallback market rates.');
     return {
       prices: FALLBACK_PRICES,
       timestamp: Date.now(),

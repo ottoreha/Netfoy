@@ -86,6 +86,7 @@ export const translations = {
     privacy: "Gizlilik",
     terms: "Şartlar",
     source: "Kaynak",
+    resetToDefaults: "Varsayılana Sıfırla",
   },
   en: {
     appName: "Netfoy",
@@ -174,6 +175,7 @@ export const translations = {
     privacy: "Privacy",
     terms: "Terms",
     source: "Source",
+    resetToDefaults: "Reset to Defaults",
   }
 };
 

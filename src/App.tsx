@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Minus, TrendingUp, TrendingDown, Wallet, Trash2, Calendar, DollarSign, Euro, PoundSterling, SwissFranc, Gem, Coins, Circle, Diamond, History, RefreshCw, Loader2, Activity, Settings, Clock, Check, Sun, Moon, ListFilter, ChevronDown, Sparkles, X } from 'lucide-react';
+import { Plus, Minus, TrendingUp, TrendingDown, Wallet, Trash2, Calendar, DollarSign, Euro, PoundSterling, SwissFranc, Gem, Coins, Circle, Diamond, History, RefreshCw, Loader2, Activity, Settings, Clock, Check, Sun, Moon, ListFilter, ChevronDown, Sparkles, X, Pencil, Coffee, Leaf } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 import { Toaster, toast } from 'sonner';
 import { AssetPortfolio, Purchase, AssetType, AssetCategory, ASSET_LABELS, EntryType } from './types';
-import { MOCK_INVESTMENTS } from './constants';
 import { cn, formatCurrency, formatPercent, formatDate } from './lib/utils';
 import { fetchMarketPrices } from './services/marketService';
 import { analyzePortfolio, PortfolioAnalysis } from './services/aiService';
 import { translations, Language } from './i18n';
+import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
+import { TermsOfServiceModal } from './components/TermsOfServiceModal';
 
 const StepperInput = ({ value, onChange, label, step = 1, min = 0, placeholder }: { 
   value: string; 
@@ -66,6 +67,35 @@ const StepperInput = ({ value, onChange, label, step = 1, min = 0, placeholder }
   );
 };
 
+const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <div 
+      className="relative flex items-center"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+      onFocus={() => setIsVisible(true)}
+      onBlur={() => setIsVisible(false)}
+    >
+      {children}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 5, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 5, scale: 0.95 }}
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-xl text-[10px] font-bold text-text-primary whitespace-nowrap shadow-2xl z-[100] pointer-events-none backdrop-blur-md"
+          >
+            {text}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-primary" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export default function App() {
   const [investments, setInvestments] = useState<AssetPortfolio[]>([]);
   const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
@@ -84,16 +114,20 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
     const saved = localStorage.getItem('netfoy_auto_refresh');
-    return saved ? JSON.parse(saved) : true;
+    return saved ? JSON.parse(saved) : false;
   });
   const [refreshInterval, setRefreshInterval] = useState(() => {
     const saved = localStorage.getItem('netfoy_refresh_interval');
-    return saved ? JSON.parse(saved) : 1;
+    return saved ? JSON.parse(saved) : 30;
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'VALUE' | 'PERFORMANCE_BEST' | 'PERFORMANCE_WORST' | 'NEWEST'>('VALUE');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isRatesPanelOpen, setIsRatesPanelOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'PORTFOLIO' | 'ANALYSIS'>('PORTFOLIO');
   const [chartView, setChartView] = useState<'ASSET' | 'TYPE'>('ASSET');
   const [language, setLanguage] = useState<Language>(() => {
@@ -105,7 +139,7 @@ export default function App() {
     const saved = localStorage.getItem('netfoy_theme');
     if (saved === 'cozy') return 'kahve'; // Migration
     if (saved === 'light') return 'kahve'; // Migration
-    return (saved as 'dark' | 'kahve' | 'yesil') || 'dark';
+    return (saved as 'dark' | 'kahve' | 'yesil') || 'yesil';
   });
 
   const [assetType, setAssetType] = useState<AssetType>('USD');
@@ -117,11 +151,6 @@ export default function App() {
   const currentLivePrice = useMemo(() => {
     return marketPrices[assetType] || 0;
   }, [assetType, marketPrices]);
-
-  const isStale = useMemo(() => {
-    if (!lastUpdated) return false;
-    return Date.now() - lastUpdated > 10 * 60 * 1000; // 10 minutes
-  }, [lastUpdated]);
 
   // Apply theme
   useEffect(() => {
@@ -139,7 +168,7 @@ export default function App() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
-    // Always refresh once on mount
+    // Always refresh once on mount (Service handles caching)
     refreshPrices();
 
     if (autoRefreshEnabled) {
@@ -230,15 +259,15 @@ export default function App() {
         } else {
           console.warn('Old data structure detected in localStorage. Resetting to defaults...');
           localStorage.removeItem('netfoy_investments');
-          setInvestments(MOCK_INVESTMENTS);
+          setInvestments([]);
         }
       } catch (e) {
         console.error('Failed to parse localStorage data:', e);
-        setInvestments(MOCK_INVESTMENTS);
+        setInvestments([]);
       }
     } else {
-      setInvestments(MOCK_INVESTMENTS);
-      localStorage.setItem('netfoy_investments', JSON.stringify(MOCK_INVESTMENTS));
+      setInvestments([]);
+      localStorage.setItem('netfoy_investments', JSON.stringify([]));
     }
     setIsLoaded(true);
   }, []);
@@ -301,37 +330,73 @@ export default function App() {
       ['USD', 'EUR', 'GBP', 'CHF'].includes(assetType) ? 'FIAT' :
       ['XAU', 'XAG', 'XPT'].includes(assetType) ? 'COMMODITY' : 'TURKISH_GOLD';
 
-    const newPurchase: Purchase = {
-      id: crypto.randomUUID(),
-      purchaseDate,
-      purchasePriceTRY: parseFloat(purchasePrice),
-      quantity: parseFloat(quantity),
-      createdAt: Date.now(),
-    };
+    if (editingAssetId && editingPurchaseId) {
+      setInvestments(prev => prev.map(asset => {
+        if (asset.id === editingAssetId) {
+          const newHistory = (asset.history || []).map(p => 
+            p.id === editingPurchaseId 
+              ? { ...p, purchaseDate, purchasePriceTRY: parseFloat(purchasePrice), quantity: parseFloat(quantity) }
+              : p
+          );
+          return { ...asset, history: newHistory };
+        }
+        return asset;
+      }));
+      toast.success(language === 'tr' ? 'Başarıyla güncellendi!' : 'Successfully updated!');
+    } else {
+      const newPurchase: Purchase = {
+        id: crypto.randomUUID(),
+        purchaseDate,
+        purchasePriceTRY: parseFloat(purchasePrice),
+        quantity: parseFloat(quantity),
+        createdAt: Date.now(),
+      };
 
-    setInvestments(prev => {
-      const existingAsset = prev.find(a => a.assetType === assetType && a.entryType === entryType);
-      if (existingAsset) {
-        return prev.map(a => (a.assetType === assetType && a.entryType === entryType)
-          ? { ...a, history: [newPurchase, ...(a.history || [])].sort((a, b) => b.createdAt - a.createdAt) } 
-          : a
-        );
-      } else {
-        const newAsset: AssetPortfolio = {
-          id: crypto.randomUUID(),
-          assetType,
-          category,
-          entryType,
-          history: [newPurchase],
-        };
-        return [newAsset, ...prev];
-      }
-    });
+      setInvestments(prev => {
+        const existingAsset = prev.find(a => a.assetType === assetType && a.entryType === entryType);
+        if (existingAsset) {
+          return prev.map(a => (a.assetType === assetType && a.entryType === entryType)
+            ? { ...a, history: [newPurchase, ...(a.history || [])].sort((a, b) => b.createdAt - a.createdAt) } 
+            : a
+          );
+        } else {
+          const newAsset: AssetPortfolio = {
+            id: crypto.randomUUID(),
+            assetType,
+            category,
+            entryType,
+            history: [newPurchase],
+          };
+          return [newAsset, ...prev];
+        }
+      });
+      toast.success(t.successAdd);
+    }
 
     setIsFormOpen(false);
+    setEditingAssetId(null);
+    setEditingPurchaseId(null);
     setPurchasePrice('');
     setQuantity('');
-    toast.success(t.successAdd);
+  };
+
+  const handleEditPurchase = (asset: AssetPortfolio, purchase: Purchase) => {
+    setEditingAssetId(asset.id);
+    setEditingPurchaseId(purchase.id);
+    setAssetType(asset.assetType);
+    setEntryType(asset.entryType);
+    setPurchasePrice(purchase.purchasePriceTRY.toString());
+    setQuantity(purchase.quantity.toString());
+    setPurchaseDate(purchase.purchaseDate);
+    setIsFormOpen(true);
+  };
+
+  const handleResetDefaults = () => {
+    setAutoRefreshEnabled(false);
+    setRefreshInterval(30);
+    setTheme('yesil');
+    setLanguage('tr');
+    toast.success(language === 'tr' ? 'Ayarlar varsayılana sıfırlandı.' : 'Settings reset to defaults.');
   };
 
   const handleDeleteAsset = (id: string) => {
@@ -485,14 +550,6 @@ export default function App() {
 
       {/* Header */}
       <header className="border-b border-border-primary bg-bg-secondary/50 backdrop-blur-xl sticky top-0 z-40">
-        {isStale && (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2">
-            <Clock size={14} className="text-amber-500" />
-            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">
-              {language === 'tr' ? 'VERİLER GÜNCEL DEĞİL (10 DK+)' : 'STALE DATA (10 MIN+)'}
-            </span>
-          </div>
-        )}
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-accent-primary/10 border border-accent-primary/20 rounded-xl flex items-center justify-center shadow-lg shadow-accent-primary/10 group overflow-hidden relative">
@@ -516,46 +573,46 @@ export default function App() {
             </div>
           </div>
             <div className="flex items-center gap-2 md:gap-4">
-            <button 
-              onClick={() => setIsRatesPanelOpen(true)}
-              className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90"
-              title={t.liveRates}
-            >
-              <Activity size={18} />
-            </button>
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className={cn(
-                "p-2 md:p-2.5 rounded-full border transition-all active:scale-90 flex items-center gap-2",
-                autoRefreshEnabled 
-                  ? "bg-accent-primary/10 border-accent-primary/30 text-accent-primary shadow-lg shadow-accent-primary/10" 
-                  : "bg-bg-secondary border-border-primary text-text-secondary hover:text-text-primary"
-              )}
-              title={t.settings}
-            >
-              <div className="relative">
-                <Settings size={18} className={cn(isRefreshing && "animate-spin")} />
-                {autoRefreshEnabled && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent-primary rounded-full animate-pulse" />
+            <Tooltip text={t.liveRates}>
+              <button 
+                onClick={() => setIsRatesPanelOpen(true)}
+                className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90"
+              >
+                <Activity size={18} />
+              </button>
+            </Tooltip>
+            <Tooltip text={t.settings}>
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className={cn(
+                  "p-2 md:p-2.5 rounded-full border transition-all active:scale-90 flex items-center gap-2",
+                  autoRefreshEnabled 
+                    ? "bg-accent-primary/10 border-accent-primary/30 text-accent-primary shadow-lg shadow-accent-primary/10" 
+                    : "bg-bg-secondary border-border-primary text-text-secondary hover:text-text-primary"
                 )}
-              </div>
-              <span className="hidden lg:block text-[10px] font-bold uppercase tracking-wider">
-                {autoRefreshEnabled ? `${refreshInterval} ${language === 'tr' ? 'DK' : 'MIN'}` : t.settings}
-              </span>
-            </button>
-            <button 
-              onClick={refreshPrices}
-              disabled={isRefreshing}
-              className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90 disabled:opacity-50 flex items-center gap-2"
-              title={t.updatePrices}
-            >
-              {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-              {lastUpdated && (
-                <span className="hidden sm:block text-[10px] font-bold text-accent-primary/80">
-                  {new Date(lastUpdated).toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+              >
+                <div className="relative">
+                  <Settings size={18} className={cn(isRefreshing && "animate-spin")} />
+                </div>
+                <span className="hidden lg:block text-[10px] font-bold uppercase tracking-wider">
+                  {autoRefreshEnabled ? `${refreshInterval} ${language === 'tr' ? 'DK' : 'MIN'}` : t.settings}
                 </span>
-              )}
-            </button>
+              </button>
+            </Tooltip>
+            <Tooltip text={t.updatePrices}>
+              <button 
+                onClick={refreshPrices}
+                disabled={isRefreshing}
+                className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                {lastUpdated && (
+                  <span className="hidden sm:block text-[10px] font-bold text-accent-primary/80">
+                    {new Date(lastUpdated).toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -573,10 +630,7 @@ export default function App() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className={cn(
-                        "w-1.5 h-1.5 rounded-full animate-pulse",
-                        isStale ? "bg-amber-500" : "bg-accent-primary"
-                      )} />
+                      <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-accent-primary" />
                       <p className="text-text-secondary text-[10px] font-bold uppercase tracking-[0.2em]">{t.totalPortfolioValue}</p>
                       {lastUpdated && (
                         <span className="text-[8px] text-text-secondary opacity-40 font-mono ml-auto">
@@ -781,15 +835,17 @@ export default function App() {
                     </div>
 
                     {/* Col 6: Delete (Desktop) */}
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteAsset(asset.id);
-                      }}
-                      className="hidden md:flex items-center justify-center p-2 text-text-secondary hover:text-red-500 transition-all md:opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <Tooltip text={language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'}>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAsset(asset.id);
+                        }}
+                        className="hidden md:flex items-center justify-center p-2 text-text-secondary hover:text-red-500 transition-all md:opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </Tooltip>
 
                     {/* Mobile View (Grid for mobile) */}
                     <div className="grid grid-cols-2 gap-4 md:hidden border-t border-border-primary/30 pt-4">
@@ -857,12 +913,24 @@ export default function App() {
                                     <span className="text-text-primary opacity-80">{purchase.quantity}</span>
                                   </div>
                                 </div>
-                                <button 
-                                  onClick={() => handleDeletePurchase(asset.id, purchase.id)}
-                                  className="text-text-secondary hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <Tooltip text={language === 'tr' ? 'Düzenle' : 'Edit'}>
+                                    <button 
+                                      onClick={() => handleEditPurchase(asset, purchase)}
+                                      className="p-2 text-text-secondary hover:text-accent-primary transition-colors hover:bg-bg-tertiary rounded-lg"
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                  </Tooltip>
+                                  <Tooltip text={language === 'tr' ? 'Sil' : 'Delete'}>
+                                    <button 
+                                      onClick={() => handleDeletePurchase(asset.id, purchase.id)}
+                                      className="p-2 text-text-secondary hover:text-red-500 transition-colors hover:bg-bg-tertiary rounded-lg"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </Tooltip>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -947,7 +1015,7 @@ export default function App() {
                           tick={{ fill: 'var(--text-secondary)', fontSize: 10, fontWeight: 600 }}
                           width={80}
                         />
-                        <Tooltip 
+                        <RechartsTooltip 
                           cursor={{ fill: 'var(--bg-tertiary)', opacity: 0.4 }}
                           contentStyle={{ 
                             backgroundColor: 'var(--bg-secondary)', 
@@ -1025,13 +1093,15 @@ export default function App() {
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-none">
         <div className="flex items-center justify-center gap-3 pointer-events-auto">
           {/* Left: Live Rates */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setIsRatesPanelOpen(true)}
-            className="w-12 h-12 rounded-full bg-bg-secondary/90 backdrop-blur-md flex items-center justify-center text-text-primary shadow-lg border border-border-primary"
-          >
-            <Activity size={20} className="text-accent-primary" />
-          </motion.button>
+          <Tooltip text={t.liveRates}>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setIsRatesPanelOpen(true)}
+              className="w-12 h-12 rounded-full bg-bg-secondary/90 backdrop-blur-md flex items-center justify-center text-text-primary shadow-lg border border-border-primary"
+            >
+              <Activity size={20} className="text-accent-primary" />
+            </motion.button>
+          </Tooltip>
 
           {/* Center: Tabs */}
           <div className="flex items-center p-1 bg-bg-secondary/90 backdrop-blur-md rounded-full shadow-lg border border-border-primary">
@@ -1060,16 +1130,18 @@ export default function App() {
           </div>
 
           {/* Right: Add Entry */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              setPurchaseDate(new Date().toISOString().split('T')[0]);
-              setIsFormOpen(true);
-            }}
-            className="w-12 h-12 rounded-full bg-accent-primary flex items-center justify-center text-white shadow-lg shadow-accent-primary/20"
-          >
-            <Plus size={24} />
-          </motion.button>
+          <Tooltip text={t.addAsset}>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                setPurchaseDate(new Date().toISOString().split('T')[0]);
+                setIsFormOpen(true);
+              }}
+              className="w-12 h-12 rounded-full bg-accent-primary flex items-center justify-center text-white shadow-lg shadow-accent-primary/20"
+            >
+              <Plus size={24} />
+            </motion.button>
+          </Tooltip>
         </div>
       </div>
 
@@ -1204,43 +1276,52 @@ export default function App() {
                     <Sun size={14} className="text-accent-primary/50" />
                     {t.theme}
                   </div>
-                  <div className="grid grid-cols-3 gap-3 p-1.5 bg-bg-tertiary/50 rounded-2xl border border-border-primary">
-                    <button
-                      onClick={() => setTheme('dark')}
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-bold transition-all",
-                        theme === 'dark' 
-                          ? "bg-accent-primary text-white shadow-lg shadow-accent-primary/20" 
-                          : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      <div className={cn("w-4 h-4 rounded-full border border-white/20", theme === 'dark' ? "bg-white" : "bg-slate-900")} />
-                      {t.dark}
-                    </button>
-                    <button
-                      onClick={() => setTheme('kahve')}
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-bold transition-all",
-                        theme === 'kahve' 
-                          ? "bg-accent-primary text-white shadow-lg shadow-accent-primary/20" 
-                          : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      <div className={cn("w-4 h-4 rounded-full border border-white/20", theme === 'kahve' ? "bg-white" : "bg-[#A34324]")} />
-                      {t.kahve}
-                    </button>
-                    <button
-                      onClick={() => setTheme('yesil')}
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-bold transition-all",
-                        theme === 'yesil' 
-                          ? "bg-accent-primary text-white shadow-lg shadow-accent-primary/20" 
-                          : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      <div className={cn("w-4 h-4 rounded-full border border-white/20", theme === 'yesil' ? "bg-white" : "bg-[#047857]")} />
-                      {t.yesil}
-                    </button>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: 'dark', label: t.dark, icon: Moon, color: 'bg-slate-900', accent: 'bg-blue-500' },
+                      { id: 'kahve', label: t.kahve, icon: Coffee, color: 'bg-[#A34324]', accent: 'bg-[#F59E0B]' },
+                      { id: 'yesil', label: t.yesil, icon: Leaf, color: 'bg-[#047857]', accent: 'bg-[#10B981]' }
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setTheme(item.id as any)}
+                        className={cn(
+                          "group relative flex flex-col items-center gap-3 p-4 rounded-[2rem] border-2 transition-all duration-300",
+                          theme === item.id 
+                            ? "bg-bg-tertiary border-accent-primary shadow-xl shadow-accent-primary/10 scale-[1.02]" 
+                            : "bg-bg-tertiary/30 border-transparent hover:border-border-primary hover:bg-bg-tertiary/50"
+                        )}
+                      >
+                        {/* Swatch Preview */}
+                        <div className="relative w-12 h-12 rounded-2xl overflow-hidden shadow-inner">
+                          <div className={cn("absolute inset-0", item.color)} />
+                          <div className={cn("absolute bottom-0 right-0 w-1/2 h-1/2 rounded-tl-xl", item.accent)} />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <item.icon size={18} className={cn(
+                              "transition-transform duration-500 group-hover:scale-110",
+                              theme === item.id ? "text-white" : "text-white/40"
+                            )} />
+                          </div>
+                        </div>
+                        
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-widest transition-colors",
+                          theme === item.id ? "text-text-primary" : "text-text-secondary"
+                        )}>
+                          {item.label}
+                        </span>
+
+                        {/* Selected Indicator */}
+                        {theme === item.id && (
+                          <motion.div 
+                            layoutId="theme-active"
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-accent-primary rounded-full flex items-center justify-center shadow-lg border-2 border-bg-secondary"
+                          >
+                            <Check size={10} className="text-white" />
+                          </motion.div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1271,16 +1352,35 @@ export default function App() {
                         <span>{t.refreshInterval}</span>
                         <span className="text-accent-primary">{refreshInterval} {language === 'tr' ? 'DK' : 'MIN'}</span>
                       </div>
-                      <input 
-                        type="range"
-                        min="1"
-                        max="60"
-                        value={refreshInterval}
-                        onChange={(e) => setRefreshInterval(parseInt(e.target.value))}
-                        className="w-full accent-accent-primary bg-bg-tertiary h-1.5 rounded-full appearance-none cursor-pointer"
-                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        {[15, 20, 25, 30, 45, 60].map((val) => (
+                          <button
+                            key={val}
+                            onClick={() => setRefreshInterval(val)}
+                            className={cn(
+                              "py-2 rounded-xl text-[10px] font-bold transition-all border",
+                              refreshInterval === val 
+                                ? "bg-accent-primary text-white border-accent-primary shadow-lg shadow-accent-primary/20" 
+                                : "bg-bg-tertiary/50 text-text-secondary border-border-primary hover:text-text-primary"
+                            )}
+                          >
+                            {val}m
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* Reset Button */}
+                <div className="pt-2">
+                  <button
+                    onClick={handleResetDefaults}
+                    className="w-full py-3 px-4 bg-red-500/5 hover:bg-red-500/10 text-red-500 border border-red-500/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw size={14} />
+                    {t.resetToDefaults}
+                  </button>
                 </div>
               </div>
 
@@ -1435,8 +1535,14 @@ export default function App() {
 
                 <div className="px-8 flex flex-col h-full overflow-hidden relative z-10">
                   <div className="flex items-center justify-between mb-6 shrink-0">
-                    <h3 className="text-lg font-bold text-text-primary">{t.addAssetTitle}</h3>
-                    <button onClick={() => setIsFormOpen(false)} className="p-1.5 text-text-secondary hover:text-text-primary bg-bg-tertiary/50 rounded-full transition-colors">✕</button>
+                    <h3 className="text-lg font-bold text-text-primary">
+                      {editingAssetId ? (language === 'tr' ? 'Varlığı Düzenle' : 'Edit Asset') : t.addAssetTitle}
+                    </h3>
+                    <button onClick={() => {
+                      setIsFormOpen(false);
+                      setEditingAssetId(null);
+                      setEditingPurchaseId(null);
+                    }} className="p-1.5 text-text-secondary hover:text-text-primary bg-bg-tertiary/50 rounded-full transition-colors">✕</button>
                   </div>
 
                   {/* Entry Type Segmented Control */}
@@ -1562,7 +1668,7 @@ export default function App() {
                       type="submit"
                       className="w-full bg-accent-primary text-white font-bold py-4 rounded-2xl hover:bg-accent-primary/80 transition-all active:scale-[0.98] shadow-xl shadow-accent-primary/20"
                     >
-                      {t.addToPortfolio}
+                      {editingAssetId ? (language === 'tr' ? 'Güncelle' : 'Update') : t.addToPortfolio}
                     </button>
                   </div>
                 </form>
@@ -1571,6 +1677,18 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      <PrivacyPolicyModal 
+        isOpen={isPrivacyModalOpen} 
+        onClose={() => setIsPrivacyModalOpen(false)} 
+        t={t} 
+      />
+
+      <TermsOfServiceModal 
+        isOpen={isTermsModalOpen} 
+        onClose={() => setIsTermsModalOpen(false)} 
+        t={t} 
+      />
 
       {/* Modern & Functional Footer */}
       <footer className="mt-auto border-t border-border-primary bg-bg-secondary/30 backdrop-blur-sm pb-28 md:pb-32">
@@ -1591,18 +1709,18 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-8">
-            <a 
-              href="#" 
+            <button 
+              onClick={() => setIsPrivacyModalOpen(true)}
               className="text-xs text-text-secondary hover:text-accent-primary transition-colors font-semibold"
             >
               {t.privacy}
-            </a>
-            <a 
-              href="#" 
+            </button>
+            <button 
+              onClick={() => setIsTermsModalOpen(true)}
               className="text-xs text-text-secondary hover:text-accent-primary transition-colors font-semibold"
             >
               {t.terms}
-            </a>
+            </button>
           </div>
         </div>
       </footer>
