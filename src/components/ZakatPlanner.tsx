@@ -70,7 +70,8 @@ export const ZakatPlanner: React.FC<ZakatPlannerProps> = ({ investments, marketP
         const livePrice = marketPrices[inv.assetType] || 0;
         
         (inv.history || []).forEach((purchase, idx) => {
-          if (purchase.quantity <= 0) return;
+          // Point 5: Ignore SATIM records for maturity tracking items list
+          if (purchase.quantity <= 0 || purchase.transactionType === 'SATIM') return;
           
           const value = purchase.quantity * livePrice;
           const pDate = new Date(purchase.purchaseDate);
@@ -97,8 +98,21 @@ export const ZakatPlanner: React.FC<ZakatPlannerProps> = ({ investments, marketP
       }
     });
 
-    const totalEligibleValue = items.reduce((sum, item) => sum + item.value, 0);
-    const totalMaturedValue = items.reduce((sum, item) => sum + (item.isMatured ? item.value : 0), 0);
+    // Point 5: Subtract their amounts from the total zakat-eligible balance
+    // We calculate totalEligibleValue from scratch to ensure it follows the "Net balance" logic
+    let totalEligibleValue = 0;
+    investments.forEach(inv => {
+      if (inv.entryType === 'asset' && ELIGIBLE_ASSET_TYPES.includes(inv.assetType)) {
+        const livePrice = marketPrices[inv.assetType] || 0;
+        const netQuantity = (inv.history || []).reduce((sum, p) => sum + p.quantity, 0);
+        totalEligibleValue += netQuantity * livePrice;
+      }
+    });
+
+    // Adjust totalMaturedValue: if total matured > current net balance, cap it
+    const rawMaturedValue = items.reduce((sum, item) => sum + (item.isMatured ? item.value : 0), 0);
+    const totalMaturedValue = Math.min(rawMaturedValue, totalEligibleValue);
+    
     const isAboveNisab = totalEligibleValue >= nisabThreshold;
     const estimatedZakat = isAboveNisab ? (totalMaturedValue / 40) : 0;
 

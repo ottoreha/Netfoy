@@ -10,12 +10,15 @@ export type AssetType =
   | 'REPUBLIC_GOLD' | 'GREMSE_GOLD' | 'RESAT_GOLD'
   | 'SILVER_GRAM' | 'PLATINUM_GRAM' | 'PALLADIUM_GRAM' | 'COPPER_GRAM';
 
+export type TransactionType = 'ALIM' | 'SATIM';
+
 export interface Purchase {
   id: string;
   purchaseDate: string;
   purchasePriceTRY: number;
   quantity: number;
   createdAt: number;
+  transactionType?: TransactionType;
 }
 
 export interface AssetPortfolio {

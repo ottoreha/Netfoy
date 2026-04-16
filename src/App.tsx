@@ -3,7 +3,7 @@ import { Plus, Minus, TrendingUp, TrendingDown, Wallet, Trash2, Calendar, Dollar
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 import { Toaster, toast } from 'sonner';
-import { AssetPortfolio, Purchase, AssetType, AssetCategory, ASSET_LABELS, EntryType } from './types';
+import { AssetPortfolio, Purchase, AssetType, AssetCategory, ASSET_LABELS, EntryType, TransactionType } from './types';
 import { cn, formatCurrency, formatPercent, formatDate } from './lib/utils';
 import { fetchMarketPrices } from './services/marketService';
 import { analyzePortfolioWithAI, AIAnalysisResult } from './services/aiService';
@@ -302,6 +302,7 @@ export default function App() {
   const [purchasePrice, setPurchasePrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transactionType, setTransactionType] = useState<TransactionType>('ALIM');
 
   const currentLivePrice = useMemo(() => {
     return marketPrices[assetType] || 0;
@@ -498,6 +499,7 @@ export default function App() {
     }
 
     const finalPurchasePrice = assetType === 'TRY' ? 1 : parseFloat(purchasePrice);
+    const finalQuantity = transactionType === 'SATIM' ? -Math.abs(parseFloat(quantity)) : Math.abs(parseFloat(quantity));
 
     const category: AssetCategory = 
       ['TRY', 'USD', 'EUR', 'GBP', 'CHF'].includes(assetType) ? 'FIAT' :
@@ -508,7 +510,7 @@ export default function App() {
         if (asset.id === editingAssetId) {
           const newHistory = (asset.history || []).map(p => 
             p.id === editingPurchaseId 
-              ? { ...p, purchaseDate, purchasePriceTRY: finalPurchasePrice, quantity: parseFloat(quantity) }
+              ? { ...p, purchaseDate, purchasePriceTRY: finalPurchasePrice, quantity: finalQuantity, transactionType }
               : p
           );
           return { ...asset, history: newHistory };
@@ -521,8 +523,9 @@ export default function App() {
         id: crypto.randomUUID(),
         purchaseDate,
         purchasePriceTRY: finalPurchasePrice,
-        quantity: parseFloat(quantity),
+        quantity: finalQuantity,
         createdAt: Date.now(),
+        transactionType,
       };
 
       setInvestments(prev => {
@@ -559,8 +562,9 @@ export default function App() {
     setAssetType(asset.assetType);
     setEntryType(asset.entryType);
     setPurchasePrice(purchase.purchasePriceTRY.toString());
-    setQuantity(purchase.quantity.toString());
+    setQuantity(Math.abs(purchase.quantity).toString());
     setPurchaseDate(purchase.purchaseDate);
+    setTransactionType(purchase.transactionType || 'ALIM');
     setIsFormOpen(true);
   };
 
@@ -603,8 +607,18 @@ export default function App() {
       const livePrice = marketPrices[asset.assetType] || 0;
 
       const totalQuantity = (asset.history || []).reduce((sum, p) => sum + p.quantity, 0);
-      const totalAssetCost = (asset.history || []).reduce((sum, p) => sum + (p.purchasePriceTRY * p.quantity), 0);
-      const avgPrice = totalQuantity > 0 ? totalAssetCost / totalQuantity : 0;
+      const totalAssetCost = (asset.history || []).reduce((sum, p) => {
+        // Only ALIM counts towards cost for average calculation in simplified logic
+        // But user wants Net worth = Sum of all ALIM values + Sum of all SATIM (neg) values
+        return sum + (p.purchasePriceTRY * p.quantity);
+      }, 0);
+      
+      // Calculate Average Cost based on ALIM only for better clarity if needed, 
+      // but sticking strictly to user's net worth request.
+      const buyTransactions = (asset.history || []).filter(p => !p.transactionType || p.transactionType === 'ALIM');
+      const totalBuyQuantity = buyTransactions.reduce((sum, p) => sum + p.quantity, 0);
+      const totalBuyCost = buyTransactions.reduce((sum, p) => sum + (p.purchasePriceTRY * p.quantity), 0);
+      const avgPrice = totalBuyQuantity > 0 ? totalBuyCost / totalBuyQuantity : 0;
       
       const value = livePrice * totalQuantity;
       const pl = value - totalAssetCost;
@@ -1070,45 +1084,63 @@ export default function App() {
                           <div className="space-y-3">
                             <div className="flex items-center gap-2 text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1">
                               <History size={14} className="text-accent-primary" />
-                              {t.purchaseHistory}
+                              {t.transactionHistory}
                             </div>
                             <div className="space-y-2">
-                              {(asset.history || []).map((purchase) => (
-                                <div key={purchase.id} className="flex items-center justify-between py-3 px-4 bg-bg-secondary rounded-xl text-sm border border-border-primary shadow-sm group/purchase">
-                                  <div className="flex items-center gap-4 md:gap-8 overflow-x-auto no-scrollbar">
-                                    <div className="flex flex-col shrink-0">
-                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.date}</span>
-                                      <span className="text-text-primary font-medium text-xs">{formatDate(purchase.purchaseDate)}</span>
+                              {(asset.history || []).map((purchase) => {
+                                const isSale = purchase.transactionType === 'SATIM' || purchase.quantity < 0;
+                                return (
+                                  <div key={purchase.id} className="flex items-center justify-between py-3 px-4 bg-bg-secondary rounded-xl text-sm border border-border-primary shadow-sm group/purchase relative overflow-hidden transition-all hover:bg-bg-tertiary">
+                                    <div className={cn(
+                                      "absolute left-0 top-0 bottom-0 w-1",
+                                      isSale ? "bg-red-500" : "bg-emerald-500"
+                                    )} />
+                                    <div className="flex items-center gap-4 md:gap-8 overflow-x-auto no-scrollbar">
+                                      <div className="flex flex-col shrink-0">
+                                        <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.date}</span>
+                                        <span className="text-text-primary font-medium text-xs">{formatDate(purchase.purchaseDate)}</span>
+                                      </div>
+                                      <div className="flex flex-col shrink-0">
+                                        <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">
+                                          {isSale ? t.sellPrice : t.buyPrice}
+                                        </span>
+                                        <span className={cn(
+                                          "font-medium text-xs",
+                                          isSale ? "text-red-500" : "text-emerald-500"
+                                        )}>
+                                          {formatCurrency(purchase.purchasePriceTRY)}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col shrink-0">
+                                        <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">
+                                          {isSale ? t.sellQuantity : t.buyQuantity}
+                                        </span>
+                                        <span className="text-text-primary font-bold text-xs">
+                                          {isSale ? '-' : '+'}{Math.abs(purchase.quantity).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col shrink-0">
-                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.price}</span>
-                                      <span className="text-text-primary font-medium text-xs">{formatCurrency(purchase.purchasePriceTRY)}</span>
-                                    </div>
-                                    <div className="flex flex-col shrink-0">
-                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.amount}</span>
-                                      <span className="text-text-primary font-medium text-xs">{purchase.quantity}</span>
+                                    <div className="flex items-center gap-1 ml-2 md:opacity-0 group-hover/purchase:opacity-100 transition-opacity">
+                                      <Tooltip text={language === 'tr' ? 'Düzenle' : 'Edit'} side="top">
+                                        <button 
+                                          onClick={() => handleEditPurchase(asset, purchase)}
+                                          className="p-2 text-text-secondary hover:text-accent-primary transition-colors hover:bg-bg-tertiary rounded-lg"
+                                        >
+                                          <Pencil size={14} />
+                                        </button>
+                                      </Tooltip>
+                                      <Tooltip text={language === 'tr' ? 'Sil' : 'Delete'} side="top">
+                                        <button 
+                                          onClick={() => handleDeletePurchase(asset.id, purchase.id)}
+                                          className="p-2 text-text-secondary hover:text-red-500 transition-colors hover:bg-bg-tertiary rounded-lg"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </Tooltip>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-1 ml-2 md:opacity-0 group-hover/purchase:opacity-100 transition-opacity">
-                                    <Tooltip text={language === 'tr' ? 'Düzenle' : 'Edit'} side="top">
-                                      <button 
-                                        onClick={() => handleEditPurchase(asset, purchase)}
-                                        className="p-2 text-text-secondary hover:text-accent-primary transition-colors hover:bg-bg-tertiary rounded-lg"
-                                      >
-                                        <Pencil size={14} />
-                                      </button>
-                                    </Tooltip>
-                                    <Tooltip text={language === 'tr' ? 'Sil' : 'Delete'} side="top">
-                                      <button 
-                                        onClick={() => handleDeletePurchase(asset.id, purchase.id)}
-                                        className="p-2 text-text-secondary hover:text-red-500 transition-colors hover:bg-bg-tertiary rounded-lg"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </Tooltip>
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
 
@@ -1848,31 +1880,58 @@ export default function App() {
                     }} className="p-1.5 text-text-secondary hover:text-text-primary bg-bg-tertiary/50 rounded-full transition-colors">✕</button>
                   </div>
 
-                  {/* Entry Type Segmented Control */}
-                  <div className="flex p-1 bg-bg-tertiary/50 rounded-2xl border border-border-primary mb-8 shrink-0">
-                    {(['asset', 'debt', 'receivable'] as const).map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setEntryType(type)}
-                        className={cn(
-                          "flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all relative z-10",
-                          entryType === type 
-                            ? type === 'debt' 
-                              ? "bg-red-500 text-white shadow-lg shadow-red-500/20" 
-                              : "bg-accent-primary text-white shadow-lg shadow-accent-primary/20"
-                            : "text-text-secondary hover:text-text-primary"
-                        )}
-                      >
-                        {type === 'asset' ? t.assets : type === 'debt' ? t.debt : t.receivable}
-                      </button>
-                    ))}
+                  {/* Entry Type & Transaction Type Control Group */}
+                  <div className="flex flex-col gap-4 mb-8 shrink-0">
+                    <div className="flex p-1 bg-bg-tertiary/50 rounded-2xl border border-border-primary">
+                      {(['asset', 'debt', 'receivable'] as const).map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setEntryType(type)}
+                          className={cn(
+                            "flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all relative z-10",
+                            entryType === type 
+                              ? type === 'debt' 
+                                ? "bg-red-500 text-white shadow-lg shadow-red-500/20" 
+                                : "bg-accent-primary text-white shadow-lg shadow-accent-primary/20"
+                              : "text-text-secondary hover:text-text-primary"
+                          )}
+                        >
+                          {type === 'asset' ? t.assets : type === 'debt' ? t.debt : t.receivable}
+                        </button>
+                      ))}
+                    </div>
+
+                    {entryType === 'asset' && (
+                      <div className="flex p-1 bg-bg-tertiary/50 rounded-2xl border border-border-primary">
+                        {(['ALIM', 'SATIM'] as const).map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setTransactionType(type)}
+                            className={cn(
+                              "flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all relative z-10",
+                              transactionType === type 
+                                ? type === 'SATIM' 
+                                  ? "bg-red-500 text-white shadow-lg shadow-red-500/20" 
+                                  : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                                : "text-text-secondary hover:text-text-primary"
+                            )}
+                          >
+                            <span className="flex items-center justify-center gap-2">
+                              {type === 'ALIM' ? <Plus size={12} /> : <Minus size={12} />}
+                              {type === 'ALIM' ? t.buyAction : t.sellAction}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <form onSubmit={handleAddInvestment} className="flex flex-col h-full overflow-hidden">
                   <div className="flex-1 overflow-y-auto space-y-8 custom-scrollbar pr-2 pb-32">
                     <StepperInput 
-                      label={t.quantity}
+                      label={transactionType === 'SATIM' ? t.sellQuantity : t.buyQuantity}
                       value={quantity}
                       onChange={setQuantity}
                       step={1}
@@ -1911,7 +1970,7 @@ export default function App() {
                     {assetType !== 'TRY' && (
                       <>
                         <StepperInput 
-                          label={t.purchasePriceTry}
+                          label={transactionType === 'SATIM' ? t.sellPrice : t.buyPrice}
                           value={purchasePrice}
                           onChange={setPurchasePrice}
                           step={100}
