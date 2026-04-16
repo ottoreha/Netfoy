@@ -10,6 +10,7 @@ import { analyzePortfolioWithAI, AIAnalysisResult } from './services/aiService';
 import { translations, Language } from './i18n';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { TermsOfServiceModal } from './components/TermsOfServiceModal';
+import { ZakatPlanner } from './components/ZakatPlanner';
 
 const StepperInput = ({ value, onChange, label, step = 1, min = 0, placeholder }: { 
   value: string; 
@@ -207,6 +208,7 @@ export default function App() {
   const [isFallback, setIsFallback] = useState(false);
   const [expandedAsset, setExpandedAsset] = useState<string | null>(null);
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+  const [analysisModalTab, setAnalysisModalTab] = useState<'AI' | 'ZAKAT'>('AI');
   const [categoryFilter, setCategoryFilter] = useState<AssetCategory | 'ALL'>('ALL');
 
   // AI Analysis State
@@ -457,6 +459,7 @@ export default function App() {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
+    setAnalysisModalTab('AI');
     setIsAnalysisModalOpen(true);
     
     try {
@@ -1251,6 +1254,11 @@ export default function App() {
                   </button>
                 )}
               </motion.div>
+            </section>
+
+            {/* Zakat Planner Standalone Card */}
+            <section className="mt-8">
+              <ZakatPlanner investments={investments} marketPrices={marketPrices} language={language} />
             </section>
           </div>
         )}
