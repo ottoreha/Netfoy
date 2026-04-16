@@ -3,7 +3,7 @@ export type AssetCategory = 'FIAT' | 'COMMODITY' | 'TURKISH_GOLD';
 export type EntryType = 'asset' | 'debt' | 'receivable';
 
 export type AssetType = 
-  | 'USD' | 'EUR' | 'GBP' | 'CHF' | 'JPY' | 'CAD' | 'AUD' | 'NOK' | 'SEK' | 'DKK'
+  | 'TRY' | 'USD' | 'EUR' | 'GBP' | 'CHF' | 'JPY' | 'CAD' | 'AUD' | 'NOK' | 'SEK' | 'DKK'
   | 'XAU' | 'XAG' | 'XPT' | 'XPD' | 'XCU'
   | 'HAS_GOLD' | 'GRAM_GOLD' | '22K_GOLD' | '14K_GOLD'
   | 'QUARTER_GOLD' | 'HALF_GOLD' | 'FULL_GOLD' 
@@ -33,6 +33,7 @@ export interface MarketPrice {
 }
 
 export const ASSET_LABELS: Record<AssetType, string> = {
+  TRY: 'Türk Lirası (TL)',
   USD: 'ABD Doları',
   EUR: 'Euro',
   GBP: 'İngiliz Sterlini',

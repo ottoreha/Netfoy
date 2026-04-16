@@ -34,7 +34,7 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({ isOpen
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-text-primary">{t.terms}</h3>
-                  <p className="text-xs text-text-secondary font-medium uppercase tracking-wider mt-1">Son Güncelleme: 16 Nisan 2026</p>
+                  <p className="text-xs text-text-secondary font-medium uppercase tracking-wider mt-1">{t.termsLastUpdate}</p>
                 </div>
               </div>
               <button
@@ -49,9 +49,9 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({ isOpen
               <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl flex gap-4">
                 <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-1" />
                 <div className="space-y-2">
-                  <h4 className="font-bold text-amber-600">1. Hizmetin Doğası ve Sorumluluk Reddi (ÖNEMLİ)</h4>
+                  <h4 className="font-bold text-amber-600">{t.termsDisclaimerTitle}</h4>
                   <p className="text-sm text-text-primary opacity-80 leading-relaxed">
-                    Netfoy, kullanıcıların kendi varlıklarını takip etmelerini sağlayan kişisel bir araçtır. Uygulama içerisinde sunulan döviz kurları, altın fiyatları, grafikler, yapay zeka özetleri veya diğer piyasa verileri kesinlikle <span className="font-bold underline">yatırım tavsiyesi değildir.</span>
+                    {t.termsDisclaimerTextStart}<span className="font-bold underline">{t.termsDisclaimerHighlight}</span>
                   </p>
                 </div>
               </div>
@@ -59,40 +59,40 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({ isOpen
               <div className="space-y-4">
                 <section>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    * Piyasa verileri üçüncü taraf sağlayıcılardan anlık olarak çekilmektedir ve gecikmeler, sistemsel hatalar veya tutarsızlıklar yaşanabilir.
+                    {t.termsDisclaimerNote1}
                   </p>
                   <p className="text-sm text-text-secondary leading-relaxed mt-2">
-                    Kullanıcılar, Netfoy'daki verilere dayanarak aldıkları alım/satım veya yatırım kararlarından tamamen kendileri sorumludur. Netfoy, oluşabilecek maddi zararlardan sorumlu tutulamaz.
+                    {t.termsDisclaimerNote2}
                   </p>
                 </section>
 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    2. Veri Kaybı Sorumluluğu
+                    {t.termsDataLossTitle}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Netfoy, bulut tabanlı bir yedekleme sunmaz. Tüm portföy verileriniz kendi cihazınızda tutulduğu için; cihazın kaybolması, bozulması veya tarayıcı verilerinin silinmesi durumunda yaşanacak veri kayıplarından kullanıcı sorumludur.
+                    {t.termsDataLossText}
                   </p>
                 </section>
 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    3. Hizmetin Kesintiye Uğraması
+                    {t.termsDisruptionTitle}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Netfoy uygulamasını "olduğu gibi" (as is) ve ücretsiz olarak sunarız. Uygulamanın kesintisiz veya tamamen hatasız çalışacağını garanti etmeyiz. Bakım çalışmaları, API sağlayıcılarının çökmesi veya güncellemeler nedeniyle hizmette geçici aksamalar yaşanabilir.
+                    {t.termsDisruptionText}
                   </p>
                 </section>
 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    4. Değişiklik Hakkı
+                    {t.termsModificationTitle}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Netfoy, bu Kullanım Şartları'nı ve Gizlilik Politikası'nı önceden haber vermeksizin güncelleme hakkını saklı tutar. Kullanıcılar uygulamayı kullanmaya devam ederek güncel şartları kabul etmiş sayılırlar.
+                    {t.termsModificationText}
                   </p>
                 </section>
               </div>

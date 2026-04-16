@@ -34,7 +34,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-text-primary">{t.privacy}</h3>
-                  <p className="text-xs text-text-secondary font-medium uppercase tracking-wider mt-1">Son Güncelleme: 16 Nisan 2026</p>
+                  <p className="text-xs text-text-secondary font-medium uppercase tracking-wider mt-1">{t.privacyLastUpdate}</p>
                 </div>
               </div>
               <button
@@ -47,31 +47,31 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
 
             <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar space-y-6">
               <p className="text-text-primary opacity-90 leading-relaxed">
-                Netfoy olarak dijital gizliliğinize en üst düzeyde saygı duyuyoruz. Uygulamamızı geliştirirken benimsediğimiz temel ilke: <span className="text-accent-primary font-bold">"Sizin veriniz, sizin cihazınızda kalır."</span>
+                {t.privacyIntroStart}<span className="text-accent-primary font-bold">{t.privacyIntroHighlight}</span>
               </p>
 
               <div className="space-y-4">
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    1. Hangi Verileri Topluyoruz?
+                    {t.privacyQ1Title}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Netfoy, kullanıcılarından hiçbir kişisel bilgi (isim, e-posta, telefon numarası vb.) talep etmez. Bir kullanıcı hesabı veya şifreleme sistemi bulunmamaktadır.
+                    {t.privacyQ1Text}
                   </p>
                 </section>
 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    2. Verileriniz Nerede Saklanıyor?
+                    {t.privacyQ2Title}
                   </h4>
                   <div className="text-sm text-text-secondary leading-relaxed space-y-3">
-                    <p>Uygulamaya eklediğiniz tüm varlıklar, borçlar, işlemler ve portföy bilgileri yalnızca o an kullandığınız cihazın tarayıcı önbelleğinde (Local Storage) saklanır. Netfoy'un bu verilerin tutulduğu bir merkezi sunucusu veya veritabanı yoktur. Bu nedenle:</p>
+                    <p>{t.privacyQ2Intro}</p>
                     <ul className="list-disc pl-5 space-y-2">
-                      <li>Biz (Netfoy geliştiricileri) finansal verilerinize erişemeyiz.</li>
-                      <li>Verileriniz üçüncü şahıslarla paylaşılamaz veya satılamaz.</li>
-                      <li>Tarayıcı geçmişinizi veya site verilerini temizlerseniz, Netfoy üzerindeki portföyünüz de kalıcı olarak silinir.</li>
+                      <li>{t.privacyQ2Item1}</li>
+                      <li>{t.privacyQ2Item2}</li>
+                      <li>{t.privacyQ2Item3}</li>
                     </ul>
                   </div>
                 </section>
@@ -79,20 +79,20 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    3. Üçüncü Taraf Hizmetleri
+                    {t.privacyQ3Title}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Uygulama, size anlık piyasa fiyatlarını (döviz, altın vb.) sunabilmek için güvenilir dış API servisleri (örn. CollectAPI) ile iletişim kurar. Bu işlem sırasında sadece piyasa verileri çekilir; sizin cihazınızdaki portföy rakamları veya kişisel tercihleriniz bu servislere gönderilmez.
+                    {t.privacyQ3Text}
                   </p>
                 </section>
 
                 <section>
                   <h4 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
                     <div className="w-1 h-4 bg-accent-primary rounded-full" />
-                    4. Çerezler (Cookies)
+                    {t.privacyQ4Title}
                   </h4>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    Netfoy, reklam veya takip çerezleri kullanmaz. Sadece seçtiğiniz tema (Karanlık/Kahve/Yeşil) ve arayüz dizilimi gibi tercihlerinizi hatırlamak için cihazınızın yerel depolama alanını kullanır.
+                    {t.privacyQ4Text}
                   </p>
                 </section>
               </div>

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Minus, TrendingUp, TrendingDown, Wallet, Trash2, Calendar, DollarSign, Euro, PoundSterling, SwissFranc, Gem, Coins, Circle, Diamond, History, RefreshCw, Loader2, Activity, Settings, Clock, Check, Sun, Moon, ListFilter, ChevronDown, Sparkles, X, Pencil, Coffee, Leaf } from 'lucide-react';
+import { Plus, Minus, TrendingUp, TrendingDown, Wallet, Trash2, Calendar, DollarSign, Euro, PoundSterling, SwissFranc, Gem, Coins, Circle, Diamond, History, RefreshCw, Loader2, Activity, Settings, Clock, Check, Sun, Moon, ListFilter, ChevronDown, Sparkles, X, Pencil, Coffee, Leaf, AlertTriangle, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 import { Toaster, toast } from 'sonner';
 import { AssetPortfolio, Purchase, AssetType, AssetCategory, ASSET_LABELS, EntryType } from './types';
 import { cn, formatCurrency, formatPercent, formatDate } from './lib/utils';
 import { fetchMarketPrices } from './services/marketService';
-import { analyzePortfolio, PortfolioAnalysis } from './services/aiService';
+import { analyzePortfolioWithAI, AIAnalysisResult } from './services/aiService';
 import { translations, Language } from './i18n';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { TermsOfServiceModal } from './components/TermsOfServiceModal';
@@ -67,7 +67,7 @@ const StepperInput = ({ value, onChange, label, step = 1, min = 0, placeholder }
   );
 };
 
-const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }) => {
+const Tooltip = ({ children, text, side = 'bottom' }: { children: React.ReactNode; text: string; side?: 'top' | 'bottom' }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   return (
@@ -82,18 +82,118 @@ const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }
       <AnimatePresence>
         {isVisible && (
           <motion.div
-            initial={{ opacity: 0, y: 5, scale: 0.95 }}
+            initial={{ opacity: 0, y: side === 'bottom' ? 5 : -5, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 5, scale: 0.95 }}
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-xl text-[10px] font-bold text-text-primary whitespace-nowrap shadow-2xl z-[100] pointer-events-none backdrop-blur-md"
+            exit={{ opacity: 0, y: side === 'bottom' ? 5 : -5, scale: 0.95 }}
+            className={cn(
+              "absolute left-1/2 -translate-x-1/2 px-3 py-2 bg-bg-secondary border border-border-primary rounded-xl text-[10px] font-bold text-text-primary whitespace-nowrap shadow-2xl z-[100] pointer-events-none backdrop-blur-md min-h-fit",
+              side === 'bottom' ? "top-full mt-2" : "bottom-full mb-2"
+            )}
           >
             {text}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-primary" />
+            <div className={cn(
+              "absolute left-1/2 -translate-x-1/2 border-4 border-transparent",
+              side === 'bottom' ? "bottom-full border-b-border-primary" : "top-full border-t-border-primary"
+            )} />
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
+};
+
+const ErrorFallback = ({ language }: { language: string }) => {
+  const isTr = language === 'tr';
+  return (
+    <div className="flex-1 flex items-center justify-center p-6 bg-red-500/5">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="max-w-md w-full bg-bg-secondary border border-red-500/20 rounded-[2.5rem] p-8 text-center shadow-2xl relative overflow-hidden"
+      >
+        <div className="absolute top-0 left-0 w-full h-1 bg-red-500" />
+        <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+          <div className="absolute inset-0 bg-red-500/20 rounded-full animate-ping" />
+          <AlertTriangle className="text-red-500 w-12 h-12 relative z-10" />
+        </div>
+        <h2 className="text-2xl font-black text-text-primary mb-3">
+          {isTr ? 'Bir Şeyler Ters Gitti' : 'Something Went Wrong'}
+        </h2>
+        <p className="text-sm text-text-secondary leading-relaxed mb-8">
+          {isTr 
+            ? 'Uygulama yüklenirken bir sorun oluştu. Merak etmeyin, verileriniz güvende.' 
+            : 'An error occurred while loading the application. Don\'t worry, your data is safe.'}
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="w-full py-4 bg-red-500 text-white font-bold rounded-2xl hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
+        >
+          <RefreshCw size={18} />
+          {isTr ? 'Sayfayı Yeniden Yükle' : 'Reload Page'}
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode; language: string }, { hasError: boolean }> {
+  public state: { hasError: boolean };
+  public props: { children: React.ReactNode; language: string };
+
+  constructor(props: { children: React.ReactNode; language: string }) {
+    super(props);
+    this.props = props;
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback language={this.props.language} />;
+    }
+    return this.props.children;
+  }
+}
+
+const CustomTooltip = ({ active, payload, label, language }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    
+    // Safely parse percentage from custom data.percentage or recharts data.percent
+    const rawVal = data.percentage !== undefined ? data.percentage : (data.percent ? data.percent * 100 : 0);
+    const num = Number(rawVal);
+    const safePercentNum = isNaN(num) ? 0 : num;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="bg-bg-secondary/90 backdrop-blur-xl border border-border-primary rounded-2xl p-4 shadow-2xl min-w-[160px]"
+      >
+        <p className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2 border-b border-border-primary pb-2">
+          {label || data.name}
+        </p>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">{language === 'tr' ? 'Değer' : 'Value'}</span>
+            <span className="text-xs font-bold text-text-primary">{formatCurrency(data.value)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">{language === 'tr' ? 'Pay' : 'Share'}</span>
+            <span className="text-xs font-bold text-accent-primary">%{safePercentNum.toFixed(1)}</span>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+  return null;
 };
 
 export default function App() {
@@ -110,8 +210,9 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<AssetCategory | 'ALL'>('ALL');
 
   // AI Analysis State
-  const [analysis, setAnalysis] = useState<PortfolioAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
     const saved = localStorage.getItem('netfoy_auto_refresh');
     return saved ? JSON.parse(saved) : false;
@@ -128,6 +229,7 @@ export default function App() {
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'PORTFOLIO' | 'ANALYSIS'>('PORTFOLIO');
   const [chartView, setChartView] = useState<'ASSET' | 'TYPE'>('ASSET');
   const [language, setLanguage] = useState<Language>(() => {
@@ -135,6 +237,58 @@ export default function App() {
     return (saved as Language) || 'tr';
   });
   const t = translations[language];
+
+  // Helper to safely get translated asset display name handling legacy names from localStorage
+  const getAssetDisplayName = (assetType: unknown, assetName?: string) => {
+    // 1. Prioritize direct i18n map lookup by assetType
+    if (assetType && t.assetsMap && (t.assetsMap as any)[assetType as string]) {
+      return (t.assetsMap as any)[assetType as string];
+    }
+    
+    // 2. Fallback to Legacy names directly translating them via English equivalents map
+    if (assetName) {
+      const legacyToKey: Record<string, string> = {
+        'Türk Lirası (TL)': 'TRY',
+        'ABD Doları': 'USD',
+        'Euro': 'EUR',
+        'İngiliz Sterlini': 'GBP',
+        'İsviçre Frangı': 'CHF',
+        'Japon Yeni': 'JPY',
+        'Kanada Doları': 'CAD',
+        'Avustralya Doları': 'AUD',
+        'Norveç Kronu': 'NOK',
+        'İsveç Kronu': 'SEK',
+        'Danimarka Kronu': 'DKK',
+        'Altın (Küresel)': 'XAU',
+        'Gümüş (Küresel)': 'XAG',
+        'Platin (Küresel)': 'XPT',
+        'Paladyum (Küresel)': 'XPD',
+        'Bakır (Küresel)': 'XCU',
+        'Has Altın (24K)': 'HAS_GOLD',
+        'Gram Altın': 'GRAM_GOLD',
+        '22 Ayar Bilezik': '22K_GOLD',
+        '14 Ayar Altın': '14K_GOLD',
+        'Çeyrek Altın': 'QUARTER_GOLD',
+        'Yarım Altın': 'HALF_GOLD',
+        'Tam Altın (Ziynet)': 'FULL_GOLD',
+        'Cumhuriyet Altını (Ata)': 'REPUBLIC_GOLD',
+        'Gremse Altın (2.5\'luk)': 'GREMSE_GOLD',
+        'Reşat Altın': 'RESAT_GOLD',
+        'Gümüş (Gram)': 'SILVER_GRAM',
+        'Platin (Gram)': 'PLATINUM_GRAM',
+        'Paladyum (Gram)': 'PALLADIUM_GRAM',
+        'Bakır (Gram)': 'COPPER_GRAM',
+      };
+      const key = legacyToKey[assetName];
+      if (key && t.assetsMap && (t.assetsMap as any)[key]) {
+        return (t.assetsMap as any)[key];
+      }
+      return assetName;
+    }
+
+    // 3. Fallback to constant ASSET_LABELS
+    return ASSET_LABELS[assetType as AssetType] || assetType as string;
+  };
   const [theme, setTheme] = useState<'dark' | 'kahve' | 'yesil'>(() => {
     const saved = localStorage.getItem('netfoy_theme');
     if (saved === 'cozy') return 'kahve'; // Migration
@@ -217,6 +371,7 @@ export default function App() {
     );
 
     switch (type) {
+      case 'TRY': return <Coins size={iconSize} className="text-amber-600" />;
       case 'USD': return <DollarSign size={iconSize} className="text-profit-primary" />;
       case 'EUR': return <Euro size={iconSize} className="text-blue-500" />;
       case 'GBP': return <PoundSterling size={iconSize} className="text-indigo-500" />;
@@ -302,17 +457,31 @@ export default function App() {
   const runAIAnalysis = async () => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
+    setAnalysisError(null);
+    setIsAnalysisModalOpen(true);
+    
     try {
-      const result = await analyzePortfolio(investments, marketPrices, {
-        totalCost: portfolioStats.totalCost,
-        currentValue: portfolioStats.currentValue,
-        totalPL: portfolioStats.totalPL,
-        totalPLPercent: portfolioStats.totalPLPercent,
+      // Small delay for better UX transition
+      await new Promise(r => setTimeout(r, 400));
+      
+      const result = await analyzePortfolioWithAI({
+        assets: investments,
+        stats: {
+          totalCost: portfolioStats.totalCost,
+          currentValue: portfolioStats.currentValue,
+          totalPL: portfolioStats.totalPL,
+          totalPLPercent: portfolioStats.totalPLPercent,
+        }
       });
       setAnalysis(result);
-      setIsAnalysisModalOpen(true);
-      toast.success(language === 'tr' ? 'Yapay Zeka Analizi tamamlandı!' : 'AI Analysis completed!');
+      if (!process.env.GEMINI_API_KEY) {
+        toast.info(language === 'tr' ? 'Demo verileri gösteriliyor (API Anahtarı eksik).' : 'Showing demo data (API Key missing).');
+      } else {
+        toast.success(language === 'tr' ? 'Yapay Zeka Analizi tamamlandı!' : 'AI Analysis completed!');
+      }
     } catch (error) {
+      console.error(error);
+      setAnalysisError(error instanceof Error ? error.message : "Analiz başarısız oldu.");
       toast.error(language === 'tr' ? 'Yapay Zeka Analizi başarısız oldu.' : 'AI Analysis failed.');
     } finally {
       setIsAnalyzing(false);
@@ -327,7 +496,7 @@ export default function App() {
     }
 
     const category: AssetCategory = 
-      ['USD', 'EUR', 'GBP', 'CHF'].includes(assetType) ? 'FIAT' :
+      ['TRY', 'USD', 'EUR', 'GBP', 'CHF'].includes(assetType) ? 'FIAT' :
       ['XAU', 'XAG', 'XPT'].includes(assetType) ? 'COMMODITY' : 'TURKISH_GOLD';
 
     if (editingAssetId && editingPurchaseId) {
@@ -400,8 +569,15 @@ export default function App() {
   };
 
   const handleDeleteAsset = (id: string) => {
-    setInvestments(investments.filter(inv => inv.id !== id));
-    toast.success(t.successDelete);
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDeleteAsset = () => {
+    if (deleteConfirmId) {
+      setInvestments(investments.filter(inv => inv.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+      toast.success(t.successDelete);
+    }
   };
 
   const handleDeletePurchase = (assetId: string, purchaseId: string) => {
@@ -484,7 +660,7 @@ export default function App() {
       const total = portfolioStats.assetDetails.reduce((sum, a) => sum + a.value, 0);
       return portfolioStats.assetDetails
         .map(asset => ({
-          name: ASSET_LABELS[asset.assetType],
+          name: getAssetDisplayName(asset.assetType, (asset as any).name),
           value: asset.value,
           percentage: total > 0 ? (asset.value / total) * 100 : 0
         }))
@@ -531,7 +707,7 @@ export default function App() {
   if (!isLoaded) return null;
 
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary font-sans selection:bg-accent-primary/30">
+    <div className="flex flex-col min-h-screen bg-bg-primary text-text-primary font-sans selection:bg-accent-primary/30">
       <Toaster 
         position="top-center" 
         expand={false} 
@@ -550,9 +726,9 @@ export default function App() {
 
       {/* Header */}
       <header className="border-b border-border-primary bg-bg-secondary/50 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-accent-primary/10 border border-accent-primary/20 rounded-xl flex items-center justify-center shadow-lg shadow-accent-primary/10 group overflow-hidden relative">
+            <div className="w-10 h-10 bg-accent-primary/10 border border-accent-primary/20 rounded-xl flex items-center justify-center shadow-lg shadow-accent-primary/10 group overflow-hidden relative shrink-0">
               <svg 
                 viewBox="0 0 24 24" 
                 fill="none" 
@@ -567,47 +743,64 @@ export default function App() {
               </svg>
               <div className="absolute inset-0 bg-gradient-to-tr from-accent-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-text-primary leading-none">{t.appName}</h1>
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold tracking-tight text-text-primary leading-none truncate">{t.appName}</h1>
               <p className="text-[8px] text-text-secondary font-bold uppercase tracking-[0.2em] mt-1.5 hidden md:block">{t.appSubtitle}</p>
             </div>
           </div>
-            <div className="flex items-center gap-2 md:gap-4">
-            <Tooltip text={t.liveRates}>
+          <div className="flex items-center bg-bg-secondary/50 border border-border-primary rounded-full shadow-sm p-1">
+            {/* Live Rates */}
+            <Tooltip text={t.liveRates} side="bottom">
               <button 
                 onClick={() => setIsRatesPanelOpen(true)}
-                className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90"
+                className="p-2 md:px-3 md:py-2 text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary rounded-full transition-all active:scale-95"
               >
                 <Activity size={18} />
               </button>
             </Tooltip>
-            <Tooltip text={t.settings}>
+
+            {/* Add Asset */}
+            <Tooltip text={t.addAsset} side="bottom">
+              <button 
+                onClick={() => {
+                  setEditingAssetId(null);
+                  setEditingPurchaseId(null);
+                  setPurchasePrice('');
+                  setQuantity('');
+                  setPurchaseDate(new Date().toISOString().split('T')[0]);
+                  setIsFormOpen(true);
+                }}
+                className="p-2 md:px-3 md:py-2 text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary rounded-full transition-all active:scale-95"
+              >
+                <Plus size={18} />
+              </button>
+            </Tooltip>
+
+            {/* Settings */}
+            <Tooltip text={t.settings} side="bottom">
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className={cn(
-                  "p-2 md:p-2.5 rounded-full border transition-all active:scale-90 flex items-center gap-2",
+                  "p-2 md:px-3 md:py-2 transition-all active:scale-95 rounded-full hover:bg-bg-tertiary flex items-center justify-center",
                   autoRefreshEnabled 
-                    ? "bg-accent-primary/10 border-accent-primary/30 text-accent-primary shadow-lg shadow-accent-primary/10" 
-                    : "bg-bg-secondary border-border-primary text-text-secondary hover:text-text-primary"
+                    ? "text-accent-primary bg-accent-primary/10" 
+                    : "text-text-secondary hover:text-text-primary"
                 )}
               >
-                <div className="relative">
-                  <Settings size={18} className={cn(isRefreshing && "animate-spin")} />
-                </div>
-                <span className="hidden lg:block text-[10px] font-bold uppercase tracking-wider">
-                  {autoRefreshEnabled ? `${refreshInterval} ${language === 'tr' ? 'DK' : 'MIN'}` : t.settings}
-                </span>
+                <Settings size={18} className={cn(isRefreshing && "animate-spin")} />
               </button>
             </Tooltip>
-            <Tooltip text={t.updatePrices}>
+
+            {/* Update Prices / Timer */}
+            <Tooltip text={t.updatePrices} side="bottom">
               <button 
                 onClick={refreshPrices}
                 disabled={isRefreshing}
-                className="p-2 md:p-2.5 text-text-secondary hover:text-accent-primary bg-bg-secondary rounded-full border border-border-primary transition-all active:scale-90 disabled:opacity-50 flex items-center gap-2"
+                className="p-2 md:px-3 md:py-2 text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary rounded-full transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
               >
                 {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
                 {lastUpdated && (
-                  <span className="hidden sm:block text-[10px] font-bold text-accent-primary/80">
+                  <span className="hidden sm:block text-[10px] font-bold text-accent-primary/80 whitespace-nowrap pr-1">
                     {new Date(lastUpdated).toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
@@ -617,7 +810,8 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10 pb-32 space-y-10">
+      <ErrorBoundary language={language}>
+        <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10 pb-32 md:pb-40 space-y-10">
         {activeTab === 'PORTFOLIO' ? (
           <>
             {/* Portfolio Overview Dashboard - Simplified for Portfolio Tab */}
@@ -769,11 +963,11 @@ export default function App() {
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  className="group bg-bg-secondary border border-border-primary rounded-2xl overflow-hidden transition-all hover:border-accent-primary/30 shadow-lg"
+                  className="group bg-bg-secondary border border-border-primary rounded-2xl transition-all hover:border-accent-primary/30 shadow-lg overflow-visible"
                 >
                   <div 
                     onClick={() => setExpandedAsset(expandedAsset === asset.id ? null : asset.id)}
-                    className="p-4 md:px-8 md:py-5 grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] items-center gap-4 md:gap-6 cursor-pointer hover:bg-bg-tertiary/50 transition-colors"
+                    className="p-4 md:px-8 md:py-5 grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] items-center gap-4 md:gap-6 cursor-pointer hover:bg-bg-tertiary/50 transition-colors rounded-2xl"
                   >
                     {/* Col 1: Asset Info */}
                     <div className="flex items-center gap-4">
@@ -782,7 +976,7 @@ export default function App() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-text-primary text-sm truncate">{ASSET_LABELS[asset.assetType]}</h4>
+                          <h4 className="font-bold text-text-primary text-sm truncate">{getAssetDisplayName(asset.assetType, (asset as any).name)}</h4>
                           {asset.entryType !== 'asset' && (
                             <span className={cn(
                               "px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border",
@@ -835,54 +1029,35 @@ export default function App() {
                     </div>
 
                     {/* Col 6: Delete (Desktop) */}
-                    <Tooltip text={language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'}>
+                    <Tooltip text={language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'} side="top">
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteAsset(asset.id);
                         }}
-                        className="hidden md:flex items-center justify-center p-2 text-text-secondary hover:text-red-500 transition-all md:opacity-0 group-hover:opacity-100"
+                        className="hidden md:flex items-center justify-center p-2 text-text-secondary hover:text-red-500 transition-all md:opacity-0 group-hover:opacity-100 rounded-lg hover:bg-red-500/5"
                       >
                         <Trash2 size={16} />
                       </button>
                     </Tooltip>
 
-                    {/* Mobile View (Grid for mobile) */}
-                    <div className="grid grid-cols-2 gap-4 md:hidden border-t border-border-primary/30 pt-4">
+                    {/* Mobile Summary View */}
+                    <div className="md:hidden flex items-center justify-between w-full border-t border-border-primary/30 pt-4 mt-1">
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1 leading-tight">{t.avgPrice}</span>
-                        <span className="font-bold text-text-secondary text-xs">{formatCurrency(asset.avgPrice)}</span>
+                        <span className="text-[9px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-0.5">{t.currentVal}</span>
+                        <span className="font-bold text-text-primary text-xs">{asset.livePrice > 0 ? formatCurrency(asset.value) : '---'}</span>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1 leading-tight">{t.cost}</span>
-                        <span className="font-bold text-text-secondary text-xs">{formatCurrency(asset.cost)}</span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1 leading-tight">{t.currentVal}</span>
-                        <span className="font-bold text-text-primary text-sm">{asset.livePrice > 0 ? formatCurrency(asset.value) : '---'}</span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1 leading-tight">{t.pl}</span>
-                        <div className={cn("font-bold flex items-center gap-1 text-sm", asset.pl >= 0 ? "text-profit-primary" : "text-red-500")}>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[9px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-0.5">{t.pl}</span>
+                        <div className={cn("font-bold flex items-center gap-1 text-xs", asset.pl >= 0 ? "text-profit-primary" : "text-red-500")}>
                           {asset.pl >= 0 ? '+' : ''}{formatCurrency(asset.pl)}
-                          <span className="text-[9px] opacity-80">({formatPercent(asset.plPercent)})</span>
+                          <span className="text-[8px] opacity-80">({formatPercent(asset.plPercent)})</span>
                         </div>
                       </div>
                     </div>
-                    
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteAsset(asset.id);
-                      }}
-                      className="md:hidden flex items-center justify-center p-3 mt-2 bg-red-500/5 text-red-500 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-red-500/10"
-                    >
-                      <Trash2 size={14} className="mr-2" />
-                      {language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'}
-                    </button>
                   </div>
 
-                  {/* Purchase History */}
+                  {/* Purchase History & Actions */}
                   <AnimatePresence>
                     {expandedAsset === asset.id && (
                       <motion.div
@@ -891,48 +1066,78 @@ export default function App() {
                         exit={{ height: 0, opacity: 0 }}
                         className="border-t border-border-primary bg-bg-tertiary/30"
                       >
-                        <div className="p-5 space-y-3">
-                          <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">
-                            <History size={14} className="text-accent-primary" />
-                            {t.purchaseHistory}
+                        <div className="p-5 space-y-5">
+                          {/* Mobile Detailed Info */}
+                          <div className="grid grid-cols-2 gap-4 md:hidden pb-4 border-b border-border-primary/30">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1">{t.avgPrice}</span>
+                              <span className="font-bold text-text-secondary text-xs">{formatCurrency(asset.avgPrice)}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-text-secondary opacity-60 uppercase font-bold tracking-widest mb-1">{t.cost}</span>
+                              <span className="font-bold text-text-secondary text-xs">{formatCurrency(asset.cost)}</span>
+                            </div>
                           </div>
-                          <div className="space-y-2">
-                            {(asset.history || []).map((purchase) => (
-                              <div key={purchase.id} className="flex items-center justify-between py-2 px-4 bg-bg-secondary rounded-lg text-sm border border-border-primary">
-                                <div className="flex items-center gap-6">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-text-secondary uppercase font-bold">{t.date}</span>
-                                    <span className="text-text-primary opacity-80">{formatDate(purchase.purchaseDate)}</span>
+
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1">
+                              <History size={14} className="text-accent-primary" />
+                              {t.purchaseHistory}
+                            </div>
+                            <div className="space-y-2">
+                              {(asset.history || []).map((purchase) => (
+                                <div key={purchase.id} className="flex items-center justify-between py-3 px-4 bg-bg-secondary rounded-xl text-sm border border-border-primary shadow-sm group/purchase">
+                                  <div className="flex items-center gap-4 md:gap-8 overflow-x-auto no-scrollbar">
+                                    <div className="flex flex-col shrink-0">
+                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.date}</span>
+                                      <span className="text-text-primary font-medium text-xs">{formatDate(purchase.purchaseDate)}</span>
+                                    </div>
+                                    <div className="flex flex-col shrink-0">
+                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.price}</span>
+                                      <span className="text-text-primary font-medium text-xs">{formatCurrency(purchase.purchasePriceTRY)}</span>
+                                    </div>
+                                    <div className="flex flex-col shrink-0">
+                                      <span className="text-[8px] text-text-secondary uppercase font-bold tracking-wider">{t.amount}</span>
+                                      <span className="text-text-primary font-medium text-xs">{purchase.quantity}</span>
+                                    </div>
                                   </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-text-secondary uppercase font-bold">{t.price}</span>
-                                    <span className="text-text-primary opacity-80">{formatCurrency(purchase.purchasePriceTRY)}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-text-secondary uppercase font-bold">{t.amount}</span>
-                                    <span className="text-text-primary opacity-80">{purchase.quantity}</span>
+                                  <div className="flex items-center gap-1 ml-2 md:opacity-0 group-hover/purchase:opacity-100 transition-opacity">
+                                    <Tooltip text={language === 'tr' ? 'Düzenle' : 'Edit'} side="top">
+                                      <button 
+                                        onClick={() => handleEditPurchase(asset, purchase)}
+                                        className="p-2 text-text-secondary hover:text-accent-primary transition-colors hover:bg-bg-tertiary rounded-lg"
+                                      >
+                                        <Pencil size={14} />
+                                      </button>
+                                    </Tooltip>
+                                    <Tooltip text={language === 'tr' ? 'Sil' : 'Delete'} side="top">
+                                      <button 
+                                        onClick={() => handleDeletePurchase(asset.id, purchase.id)}
+                                        className="p-2 text-text-secondary hover:text-red-500 transition-colors hover:bg-bg-tertiary rounded-lg"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </Tooltip>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Tooltip text={language === 'tr' ? 'Düzenle' : 'Edit'}>
-                                    <button 
-                                      onClick={() => handleEditPurchase(asset, purchase)}
-                                      className="p-2 text-text-secondary hover:text-accent-primary transition-colors hover:bg-bg-tertiary rounded-lg"
-                                    >
-                                      <Pencil size={14} />
-                                    </button>
-                                  </Tooltip>
-                                  <Tooltip text={language === 'tr' ? 'Sil' : 'Delete'}>
-                                    <button 
-                                      onClick={() => handleDeletePurchase(asset.id, purchase.id)}
-                                      className="p-2 text-text-secondary hover:text-red-500 transition-colors hover:bg-bg-tertiary rounded-lg"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </Tooltip>
-                                </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Mobile Delete Button */}
+                          <div className="md:hidden pt-2">
+                            <Tooltip text={language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'} side="top">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAsset(asset.id);
+                                }}
+                                className="w-full flex items-center justify-center p-4 bg-red-500/5 text-red-500 rounded-2xl font-bold text-xs uppercase tracking-widest border border-red-500/10 hover:bg-red-500/10 transition-all"
+                              >
+                                <Trash2 size={16} className="mr-2" />
+                                {language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'}
+                              </button>
+                            </Tooltip>
                           </div>
                         </div>
                       </motion.div>
@@ -1016,17 +1221,14 @@ export default function App() {
                           width={80}
                         />
                         <RechartsTooltip 
+                          content={<CustomTooltip language={language} />}
                           cursor={{ fill: 'var(--bg-tertiary)', opacity: 0.4 }}
-                          contentStyle={{ 
-                            backgroundColor: 'var(--bg-secondary)', 
-                            borderColor: 'var(--border-primary)',
-                            borderRadius: '1.25rem',
-                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-                            padding: '12px',
-                            borderWidth: '1px'
-                          }}
-                          itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                          formatter={(value: number) => [formatCurrency(value), '']}
+                        />
+                        <Legend 
+                          verticalAlign="bottom" 
+                          height={36} 
+                          wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px', color: 'var(--text-secondary)' }}
+                          formatter={(value, entry, index) => <span className="text-text-secondary">{value}</span>}
                         />
                         <Bar 
                           dataKey="value" 
@@ -1088,12 +1290,13 @@ export default function App() {
           </div>
         )}
       </main>
+      </ErrorBoundary>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-none">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-none">
         <div className="flex items-center justify-center gap-3 pointer-events-auto">
           {/* Left: Live Rates */}
-          <Tooltip text={t.liveRates}>
+          <Tooltip text={t.liveRates} side="top">
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setIsRatesPanelOpen(true)}
@@ -1130,7 +1333,7 @@ export default function App() {
           </div>
 
           {/* Right: Add Entry */}
-          <Tooltip text={t.addAsset}>
+          <Tooltip text={t.addAsset} side="top">
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => {
@@ -1189,7 +1392,7 @@ export default function App() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                       {Object.entries(marketPrices).map(([type, price]) => {
                         const p = price as number;
-                        const label = ASSET_LABELS[type as AssetType] || type;
+                        const label = getAssetDisplayName(type);
                         
                         return (
                           <div key={type} className="bg-bg-tertiary/50 border border-border-primary p-4 rounded-2xl flex flex-col gap-1">
@@ -1399,7 +1602,7 @@ export default function App() {
 
       {/* AI Insights Modal */}
       <AnimatePresence>
-        {isAnalysisModalOpen && analysis && (
+        {isAnalysisModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6">
             <motion.div 
               initial={{ opacity: 0 }}
@@ -1417,83 +1620,204 @@ export default function App() {
               <div className="p-6 md:p-8 border-b border-border-primary flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-accent-primary/10 rounded-xl flex items-center justify-center overflow-hidden relative group">
-                    <svg 
-                      viewBox="0 0 24 24" 
-                      fill="none" 
-                      className="w-6 h-6 text-accent-primary"
-                      stroke="currentColor" 
-                      strokeWidth="1.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    >
-                      <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
-                      <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
-                    </svg>
+                    {isAnalyzing ? (
+                      <RefreshCw size={24} className="text-accent-primary animate-spin" />
+                    ) : (
+                      <Sparkles size={24} className="text-accent-primary" />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-text-primary">{t.appName} {t.aiAnalysis}</h3>
-                    <div className={cn(
-                      "mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border inline-block",
-                      analysis.riskLevel === 'Low' ? "bg-profit-primary/10 border-profit-primary/20 text-profit-primary" :
-                      analysis.riskLevel === 'Medium' ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
-                      "bg-red-500/10 border-red-500/20 text-red-500"
-                    )}>
-                      {t.risk}: {
-                        analysis.riskLevel === 'Low' ? t.low : 
-                        analysis.riskLevel === 'Medium' ? t.medium : t.high
-                      }
-                    </div>
+                    {analysis && !isAnalyzing && (
+                      <div className={cn(
+                        "mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border inline-block",
+                        (analysis.riskSeviyesi === 'DÜŞÜK' || analysis.riskSeviyesi === 'LOW') ? "bg-profit-primary/10 border-profit-primary/20 text-profit-primary" :
+                        (analysis.riskSeviyesi === 'ORTA' || analysis.riskSeviyesi === 'MEDIUM') ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
+                        "bg-red-500/10 border-red-500/20 text-red-500"
+                      )}>
+                        {t.risk}: {
+                          (analysis.riskSeviyesi === 'DÜŞÜK' || analysis.riskSeviyesi === 'LOW') ? t.low : 
+                          (analysis.riskSeviyesi === 'ORTA' || analysis.riskSeviyesi === 'MEDIUM') ? t.medium : t.high
+                        }
+                      </div>
+                    )}
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsAnalysisModalOpen(false)} 
                   className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded-full transition-colors"
                 >
-                  ✕
+                  <X size={20} />
                 </button>
               </div>
 
-              <div className="p-6 md:p-8 overflow-y-auto space-y-8 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <div className="w-1 h-3 bg-accent-primary rounded-full" />
-                        {t.summary}
-                      </h4>
-                      <p className="text-text-primary opacity-80 leading-relaxed text-sm md:text-base">{analysis.summary}</p>
+              <div className="p-6 md:p-8 overflow-y-auto space-y-8 custom-scrollbar min-h-[400px]">
+                {isAnalyzing ? (
+                  <div className="w-full flex justify-center py-2 animate-pulse">
+                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="space-y-10">
+                        {/* Summary Skeleton */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-4 bg-accent-primary/40 rounded-full" />
+                            <div className="h-3 w-20 bg-bg-tertiary rounded-full" />
+                          </div>
+                          <div className="space-y-3">
+                            <div className="h-2.5 w-full bg-bg-tertiary rounded-full" />
+                            <div className="h-2.5 w-[90%] bg-bg-tertiary rounded-full" />
+                            <div className="h-2.5 w-[95%] bg-bg-tertiary rounded-full" />
+                            <div className="h-2.5 w-[70%] bg-bg-tertiary rounded-full" />
+                          </div>
+                        </div>
+                        {/* Performance Skeleton */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-4 bg-accent-primary/40 rounded-full" />
+                            <div className="h-3 w-32 bg-bg-tertiary rounded-full" />
+                          </div>
+                          <div className="space-y-3">
+                            <div className="h-2.5 w-[85%] bg-bg-tertiary rounded-full" />
+                            <div className="h-2.5 w-full bg-bg-tertiary rounded-full" />
+                            <div className="h-2.5 w-[60%] bg-bg-tertiary rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Recommendations Skeleton */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-6">
+                          <div className="w-1 h-4 bg-accent-primary/40 rounded-full" />
+                          <div className="h-3 w-40 bg-bg-tertiary rounded-full" />
+                        </div>
+                        <div className="space-y-4">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-start gap-4 p-5 bg-bg-tertiary/30 rounded-2xl border border-border-primary/50">
+                              <div className="mt-1.5 w-1.5 h-1.5 bg-accent-primary/40 rounded-full shrink-0" />
+                              <div className="space-y-3 w-full mt-1">
+                                <div className="h-2.5 w-full bg-bg-tertiary rounded-full" />
+                                <div className="h-2.5 w-[80%] bg-bg-tertiary rounded-full" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <div className="w-1 h-3 bg-accent-primary rounded-full" />
-                        {t.performanceAssessment}
-                      </h4>
-                      <p className="text-text-primary opacity-80 leading-relaxed text-sm md:text-base">{analysis.performanceAssessment}</p>
+                    {/* Centered pulsing indicator to show it's working */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-3 pointer-events-none opacity-80 backdrop-blur-md bg-bg-secondary/50 p-6 rounded-3xl border border-border-primary/50 shadow-2xl">
+                      <Sparkles size={32} className="text-accent-primary animate-pulse" />
+                      <p className="text-[10px] font-bold text-accent-primary uppercase tracking-widest animate-pulse whitespace-nowrap">
+                        {language === 'tr' ? 'Analiz Ediliyor...' : 'Analyzing...'}
+                      </p>
                     </div>
                   </div>
-                  <div className="space-y-6">
-                    <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <div className="w-1 h-3 bg-accent-primary rounded-full" />
-                      {t.aiRecommendations}
-                    </h4>
-                    <ul className="space-y-4">
-                      {analysis.recommendations.map((rec, i) => (
-                        <li key={i} className="flex items-start gap-3 text-sm md:text-base text-text-primary opacity-80 bg-bg-tertiary/50 p-4 rounded-2xl border border-border-primary">
-                          <div className="mt-1.5 w-1.5 h-1.5 bg-accent-primary rounded-full shrink-0" />
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
+                ) : analysisError ? (
+                  <div className="flex flex-col items-center justify-center h-full py-20 text-center space-y-4">
+                    <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
+                      <AlertTriangle size={32} className="text-red-500" />
+                    </div>
+                    <p className="text-text-primary font-bold">{analysisError}</p>
+                    <button 
+                      onClick={runAIAnalysis}
+                      className="px-6 py-2 bg-accent-primary text-white rounded-xl font-bold text-sm"
+                    >
+                      {t.refresh}
+                    </button>
                   </div>
-                </div>
+                ) : analysis ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="grid grid-cols-1 md:grid-cols-2 gap-8"
+                  >
+                    <div className="space-y-6">
+                      <div>
+                        <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
+                          <div className="w-1 h-3 bg-accent-primary rounded-full" />
+                          {t.summary}
+                        </h4>
+                        <p className="text-text-primary opacity-80 leading-relaxed text-sm md:text-base">{analysis.ozet}</p>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
+                          <div className="w-1 h-3 bg-accent-primary rounded-full" />
+                          {t.performanceAssessment}
+                        </h4>
+                        <p className="text-text-primary opacity-80 leading-relaxed text-sm md:text-base">{analysis.performans}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-6">
+                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="w-1 h-3 bg-accent-primary rounded-full" />
+                        {t.aiRecommendations}
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {analysis.tavsiyeler.map((rec, i) => (
+                          <div key={i} className="flex flex-col gap-3 text-sm md:text-base text-text-primary bg-bg-tertiary/40 border border-border-primary/50 shadow-sm p-5 rounded-3xl hover:border-accent-primary/30 hover:shadow-md hover:bg-bg-tertiary/80 transition-all group h-auto break-words whitespace-normal">
+                            <div className="w-10 h-10 bg-accent-primary/10 rounded-2xl flex items-center justify-center shrink-0 border border-accent-primary/20 shadow-inner group-hover:scale-110 transition-transform">
+                              <Lightbulb size={20} className="text-accent-primary" />
+                            </div>
+                            <p className="leading-relaxed opacity-90">{rec}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
               </div>
 
-              <div className="p-6 border-t border-border-primary shrink-0">
+              <div className="p-6 border-t border-border-primary shrink-0 bg-bg-secondary/50">
                 <button 
                   onClick={() => setIsAnalysisModalOpen(false)}
-                  className="w-full py-3 bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-primary font-bold rounded-xl transition-colors"
+                  className="w-full py-4 bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-primary font-bold rounded-2xl transition-all border border-border-primary"
                 >
                   {t.close}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteConfirmId(null)}
+              className="absolute inset-0 bg-bg-primary/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-bg-secondary border border-border-primary rounded-3xl shadow-2xl overflow-hidden p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Trash2 className="text-red-500 w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary mb-2">
+                {language === 'tr' ? 'Varlığı Sil' : 'Delete Asset'}
+              </h3>
+              <p className="text-sm text-text-secondary leading-relaxed mb-8">
+                {language === 'tr' 
+                  ? 'Bu varlığı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.' 
+                  : 'Are you sure you want to delete this asset? This action cannot be undone.'}
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="py-4 bg-bg-tertiary text-text-primary font-bold rounded-2xl hover:bg-bg-tertiary/80 transition-all"
+                >
+                  {language === 'tr' ? 'İptal' : 'Cancel'}
+                </button>
+                <button 
+                  onClick={confirmDeleteAsset}
+                  className="py-4 bg-red-500 text-white font-bold rounded-2xl hover:bg-red-500/80 transition-all shadow-lg shadow-red-500/20"
+                >
+                  {language === 'tr' ? 'Sil' : 'Delete'}
                 </button>
               </div>
             </motion.div>
@@ -1586,58 +1910,23 @@ export default function App() {
                           className="w-full bg-bg-tertiary/50 border border-border-primary rounded-2xl px-5 py-4 text-text-primary text-sm focus:ring-2 focus:ring-accent-primary/30 transition-all appearance-none cursor-pointer font-bold"
                         >
                           <optgroup label={t.fiatCurrencies} className="bg-bg-secondary">
-                            <option value="USD">{language === 'tr' ? 'ABD Doları (USD)' : 'US Dollar (USD)'}</option>
-                            <option value="EUR">Euro (EUR)</option>
-                            <option value="GBP">{language === 'tr' ? 'İngiliz Sterlini (GBP)' : 'British Pound (GBP)'}</option>
-                            <option value="CHF">{language === 'tr' ? 'İsviçre Frangı (CHF)' : 'Swiss Franc (CHF)'}</option>
-                            <option value="JPY">Japon Yeni (JPY)</option>
-                            <option value="CAD">Kanada Doları (CAD)</option>
-                            <option value="AUD">Avustralya Doları (AUD)</option>
-                            <option value="NOK">Norveç Kronu (NOK)</option>
-                            <option value="SEK">İsveç Kronu (SEK)</option>
-                            <option value="DKK">Danimarka Kronu (DKK)</option>
+                            {(['TRY', 'USD', 'EUR', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD', 'NOK', 'SEK', 'DKK'] as const).map(k => (
+                              <option key={k} value={k}>{getAssetDisplayName(k)}</option>
+                            ))}
                           </optgroup>
                           <optgroup label={t.physicalGoldSilver} className="bg-bg-secondary">
-                            <option value="HAS_GOLD">{language === 'tr' ? 'Has Altın (24K)' : 'Pure Gold (24K)'}</option>
-                            <option value="GRAM_GOLD">{language === 'tr' ? 'Gram Altın' : 'Gold Gram'}</option>
-                            <option value="22K_GOLD">{language === 'tr' ? '22 Ayar Bilezik' : '22K Gold Bracelet'}</option>
-                            <option value="14K_GOLD">{language === 'tr' ? '14 Ayar Altın' : '14K Gold'}</option>
-                            <option value="QUARTER_GOLD">{language === 'tr' ? 'Çeyrek Altın' : 'Quarter Gold'}</option>
-                            <option value="HALF_GOLD">{language === 'tr' ? 'Yarım Altın' : 'Half Gold'}</option>
-                            <option value="FULL_GOLD">{language === 'tr' ? 'Tam Altın (Ziynet)' : 'Full Gold'}</option>
-                            <option value="REPUBLIC_GOLD">{language === 'tr' ? 'Cumhuriyet Altını (Ata)' : 'Republic Gold'}</option>
-                            <option value="GREMSE_GOLD">{language === 'tr' ? 'Gremse Altın (2.5\'luk)' : 'Gremse Gold'}</option>
-                            <option value="RESAT_GOLD">{language === 'tr' ? 'Reşat Altın' : 'Resat Gold'}</option>
-                            <option value="SILVER_GRAM">{language === 'tr' ? 'Gümüş (Gram)' : 'Silver Gram'}</option>
-                            <option value="PLATINUM_GRAM">{language === 'tr' ? 'Platin (Gram)' : 'Platinum Gram'}</option>
-                            <option value="PALLADIUM_GRAM">{language === 'tr' ? 'Paladyum (Gram)' : 'Palladium Gram'}</option>
-                            <option value="COPPER_GRAM">{language === 'tr' ? 'Bakır (Gram)' : 'Copper Gram'}</option>
+                            {(['HAS_GOLD', 'GRAM_GOLD', '22K_GOLD', '14K_GOLD', 'QUARTER_GOLD', 'HALF_GOLD', 'FULL_GOLD', 'REPUBLIC_GOLD', 'GREMSE_GOLD', 'RESAT_GOLD', 'SILVER_GRAM', 'PLATINUM_GRAM', 'PALLADIUM_GRAM', 'COPPER_GRAM'] as const).map(k => (
+                              <option key={k} value={k}>{getAssetDisplayName(k)}</option>
+                            ))}
                           </optgroup>
                           <optgroup label={t.globalCommodities} className="bg-bg-secondary">
-                            <option value="XAU">{language === 'tr' ? 'Altın (XAU/USD)' : 'Gold (XAU/USD)'}</option>
-                            <option value="XAG">{language === 'tr' ? 'Gümüş (XAG/USD)' : 'Silver (XAG/USD)'}</option>
-                            <option value="XPT">{language === 'tr' ? 'Platin (XPT/USD)' : 'Platinum (XPT/USD)'}</option>
-                            <option value="XPD">{language === 'tr' ? 'Paladyum (XPD/USD)' : 'Palladium (XPD/USD)'}</option>
-                            <option value="XCU">{language === 'tr' ? 'Bakır (XCU/USD)' : 'Copper (XCU/USD)'}</option>
+                            {(['XAU', 'XAG', 'XPT', 'XPD', 'XCU'] as const).map(k => (
+                              <option key={k} value={k}>{getAssetDisplayName(k)}</option>
+                            ))}
                           </optgroup>
                         </select>
                         <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" size={18} />
                       </div>
-                      {currentLivePrice > 0 && (
-                        <div className="flex items-center justify-between px-1 mt-1">
-                          <p className="text-[10px] text-text-secondary font-medium">
-                            {t.currentPrice}: <span className="text-text-primary font-bold">{formatCurrency(currentLivePrice)}</span>
-                          </p>
-                          <button 
-                            type="button"
-                            onClick={() => setPurchasePrice(currentLivePrice.toFixed(2))}
-                            className="text-[10px] text-accent-primary hover:text-accent-primary/80 font-bold uppercase tracking-wider transition-colors flex items-center gap-1"
-                          >
-                            <TrendingDown size={10} className="rotate-180" />
-                            {t.useThis}
-                          </button>
-                        </div>
-                      )}
                     </div>
 
                     <StepperInput 
@@ -1648,6 +1937,22 @@ export default function App() {
                       min={0}
                       placeholder="0.00"
                     />
+
+                    {currentLivePrice > 0 && assetType !== 'TRY' && (
+                      <div className="flex items-center justify-between px-1 -mt-5">
+                        <p className="text-sm text-text-secondary font-medium">
+                          {t.currentPrice}: <span className="text-text-primary font-bold">{formatCurrency(currentLivePrice)}</span>
+                        </p>
+                        <button 
+                          type="button"
+                          onClick={() => setPurchasePrice(currentLivePrice.toFixed(2))}
+                          className="text-[10px] text-accent-primary hover:text-accent-primary/80 font-bold uppercase tracking-wider transition-colors flex items-center gap-1"
+                        >
+                          <TrendingDown size={10} className="rotate-180" />
+                          {t.useThis}
+                        </button>
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest ml-1">{t.purchaseDate}</label>

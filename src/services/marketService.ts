@@ -28,6 +28,7 @@ export interface MarketData {
 
 // Fallback values in case APIs are completely unreachable
 const FALLBACK_PRICES: Record<AssetType, number> = {
+  TRY: 1.00,
   USD: 44.75,
   EUR: 52.80,
   GBP: 60.70,
@@ -70,7 +71,10 @@ async function fetchFinancial(url: string, apiKey?: string, retries = 2): Promis
   
   const headers: HeadersInit = {};
 
-  if (apiKey) {
+  // Only add headers if it's a CollectAPI URL and an API key is provided
+  // to prevent CORS issues with public endpoints like ExchangeRate-API
+  const isCollectApi = url.includes('collectapi.com');
+  if (isCollectApi && apiKey) {
     headers['authorization'] = `apikey ${apiKey}`;
     headers['content-type'] = 'application/json';
   }
@@ -91,7 +95,10 @@ async function fetchFinancial(url: string, apiKey?: string, retries = 2): Promis
       console.warn(`Financial fetch attempt ${i + 1} errored for ${url}:`, e);
       if (i === retries - 1) throw e;
     }
-    await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+    
+    // Exponential backoff: 1s, 2s, 4s...
+    const delay = Math.pow(2, i) * 1000;
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
   throw new Error(`Failed to fetch financial data from ${url}`);
 }
@@ -245,6 +252,7 @@ export async function fetchMarketPrices(): Promise<MarketData> {
 
     // Final Price Mapping
     const prices: Record<AssetType, number> = {
+      TRY: 1.00,
       USD: usdTry,
       EUR: rates.EUR || (usdTry / (rates.EUR_USD || (usdTry / FALLBACK_PRICES.EUR))),
       GBP: rates.GBP || (usdTry / (rates.GBP_USD || (usdTry / FALLBACK_PRICES.GBP))),

@@ -1,112 +1,96 @@
-import { GoogleGenAI } from "@google/genai";
-import { AssetPortfolio, AssetType, ASSET_LABELS } from "../types";
-import { formatCurrency, formatPercent } from "../lib/utils";
+import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-export interface PortfolioAnalysis {
-  summary: string;
-  recommendations: string[];
-  riskLevel: 'Low' | 'Medium' | 'High';
-  performanceAssessment: string;
+export interface AIAnalysisResult {
+  ozet: string;
+  riskSeviyesi: 'DÜŞÜK' | 'ORTA' | 'YÜKSEK' | 'DÜŞÜK' | 'MEDIUM' | 'HIGH';
+  tavsiyeler: string[];
+  performans: string;
 }
 
-export async function analyzePortfolio(
-  investments: AssetPortfolio[],
-  marketPrices: Record<string, number>,
-  stats: {
-    totalCost: number;
-    currentValue: number;
-    totalPL: number;
-    totalPLPercent: number;
-  },
-  language: 'tr' | 'en' = 'tr'
-): Promise<PortfolioAnalysis> {
-  if (investments.length === 0) {
-    return {
-      summary: language === 'tr' 
-        ? "Portföyünüz şu anda boş. Kişiselleştirilmiş yapay zeka analizleri almak için varlık ekleyerek başlayın."
-        : "Your portfolio is currently empty. Start by adding assets to receive personalized AI analysis.",
-      recommendations: language === 'tr'
-        ? ["Çeşitlendirmek için döviz ve emtia karışımı ekleyin.", "Performansı görmek için ilk işleminizi kaydedin."]
-        : ["Add a mix of foreign currencies and commodities to diversify.", "Record your first transaction to see performance."],
-      riskLevel: 'Low',
-      performanceAssessment: language === 'tr' ? "Değerlendirilecek veri yok." : "No data to assess."
-    };
+const MOCK_RESPONSE: AIAnalysisResult = {
+  ozet: "Bu bir test analizidir. Portföyünüz genel hatlarıyla defansif varlıklara yoğunlaşmış görünmektedir.",
+  riskSeviyesi: "DÜŞÜK",
+  tavsiyeler: [
+    "API Key eklenene kadar bu test verisini göreceksiniz.",
+    "Nakit oranınızı artırarak likidite sağlayabilirsiniz.",
+    "Sektörel dağılımı gözden geçirmekte fayda var."
+  ],
+  performans: "Enflasyona karşı koruma sağlayan stabil bir yapı."
+};
+
+/**
+ * Analyzes the portfolio using Gemini AI or returns mock data if API key is missing.
+ */
+export async function analyzePortfolioWithAI(portfolioData: any): Promise<AIAnalysisResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  // Mock-First Approach: If API key is missing, return mock data after a delay
+  if (!apiKey) {
+    console.warn("VITE_GEMINI_API_KEY is missing. Returning mock data.");
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(MOCK_RESPONSE);
+      }, 2000);
+    });
   }
 
-  const assetData = investments.map(asset => {
-    const totalQuantity = (asset.history || []).reduce((sum, p) => sum + p.quantity, 0);
-    const totalAssetCost = (asset.history || []).reduce((sum, p) => sum + (p.purchasePriceTRY * p.quantity), 0);
-    const livePrice = marketPrices[asset.assetType] || 0;
-    const value = livePrice * totalQuantity;
-    const pl = value - totalAssetCost;
-    const plPercent = totalAssetCost > 0 ? (pl / totalAssetCost) * 100 : 0;
-
-    return {
-      type: ASSET_LABELS[asset.assetType],
-      entryType: asset.entryType,
-      quantity: totalQuantity,
-      avgCost: totalQuantity > 0 ? totalAssetCost / totalQuantity : 0,
-      currentPrice: livePrice,
-      value,
-      pl,
-      plPercent
-    };
-  });
-
-  const prompt = `
-    Analyze the following portfolio as an AI investment advisor for "Netfoy":
-    
-    Net Worth: ${formatCurrency(stats.currentValue)}
-    Total Cost: ${formatCurrency(stats.totalCost)}
-    Total Profit/Loss: ${formatCurrency(stats.totalPL)} (${formatPercent(stats.totalPLPercent)})
-    
-    Asset Distribution:
-    ${assetData.map(a => `- ${a.type} (${a.entryType}): ${a.quantity} units, Avg. Cost: ${formatCurrency(a.avgCost)}, Current Price: ${formatCurrency(a.currentPrice)}, Value: ${formatCurrency(a.value)}, P/L: ${formatPercent(a.plPercent)}`).join('\n')}
-    
-    Current Market Context:
-    - USD/TRY: ${formatCurrency(marketPrices['USD'] || 0)}
-    - Gold (XAU/USD): ${formatCurrency(marketPrices['XAU'] || 0)}
-    
-    Please provide:
-    1. A brief summary of the portfolio's health.
-    2. 3-4 specific recommendations for the user.
-    3. An overall risk level (Low, Medium, High).
-    4. A brief performance assessment.
-    
-    CRITICAL: You MUST provide the analysis, summary, and recommendations STRICTLY in ${language === 'tr' ? 'Turkish' : 'English'} language.
-    
-    Return the response in JSON format with the following keys: summary, recommendations (array of strings), riskLevel (one of Low, Medium, High), performanceAssessment.
-  `;
-
   try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    const systemInstruction = `Sen 20 yıllık tecrübeye sahip, SADECE faizsiz finans prensiplerine ve geleneksel yatırıma sadık bir Portföy Yöneticisisin.\nKURALLAR: KESİNLİKLE faiz (mevduat, repo vb.), tahvil, bono, eurobond, geleneksel borsa/hisse senedi fonları, kripto para veya faiz/spekülasyon içeren hiçbir yatırım aracını TAVSİYE ETME. Bu kelimeleri kullanman yasaktır.\nTavsiyelerini SADECE fiziki altın, gümüş, döviz, gayrimenkul veya tamamen faizsiz/katılım esaslı geleneksel fiziki varlıklar üzerinden ver. (Örn: İşçilik maliyeti düşük fiziki altına geçiş, gümüş ile çeşitlendirme, döviz sepeti yapma vb.).\nKullanıcının varlık verilerini analiz edip Türkçe dilinde stratejik bir özet, risk değerlendirmesi ve tavsiyeler sunmalısın.`;
+
+    const portfolioString = JSON.stringify(portfolioData);
+    const prompt = `İşte portföy verilerim: ${portfolioString}\nLütfen analiz et.`;
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
-      },
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            ozet: { type: Type.STRING, description: "Genişletilmiş portföy özeti" },
+            riskSeviyesi: { type: Type.STRING, description: "DÜŞÜK veya ORTA veya YÜKSEK" },
+            tavsiyeler: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING },
+              description: "Kullanıcıya özel tavsiyeler listesi"
+            },
+            performans: { type: Type.STRING, description: "Performans değerlendirmesi" }
+          },
+          required: ["ozet", "riskSeviyesi", "tavsiyeler", "performans"]
+        }
+      }
     });
 
-    const result = JSON.parse(response.text || "{}");
-    return {
-      summary: result.summary || (language === 'tr' ? "Özet oluşturulamadı." : "Summary could not be generated."),
-      recommendations: result.recommendations || [],
-      riskLevel: result.riskLevel || 'Medium',
-      performanceAssessment: result.performanceAssessment || (language === 'tr' ? "Değerlendirme mevcut değil." : "Assessment not available.")
-    };
+    const text = response.text;
+    
+    // Safety check just in case text is undefined
+    if (!text) {
+        throw new Error("AI response text is empty");
+    }
+
+    // Clean markdown code blocks if occasionally present despite responseMimeType
+    const cleanJson = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    try {
+      return JSON.parse(cleanJson) as AIAnalysisResult;
+    } catch (parseError) {
+      console.error("Gemini API JSON Parsing Error:", parseError, "Raw Response Text:", text);
+      return {
+        ozet: "Yapay zeka yanıtı anlaşılamadı. Format hatası oluştu.",
+        riskSeviyesi: "ORTA",
+        tavsiyeler: [
+          "Verileriniz güvende, ancak AI sistemi beklenen formatta yanıt vermedi.",
+          "Lütfen analizi tekrar çalıştırmayı deneyin."
+        ],
+        performans: "Bilinmiyor, AI yanıt formatı hatalı."
+      };
+    }
   } catch (error) {
-    console.error("AI Analysis Error:", error);
-    return {
-      summary: language === 'tr'
-        ? "Yapay zeka şu anda portföyünüzü analiz edemiyor. Lütfen daha sonra tekrar deneyin."
-        : "AI is currently unable to analyze your portfolio. Please try again later.",
-      recommendations: language === 'tr'
-        ? ["İnternet bağlantınızı kontrol edin.", "Varlıklarınızın doğru kaydedildiğinden emin olun."]
-        : ["Check your internet connection.", "Ensure your assets are recorded correctly."],
-      riskLevel: 'Medium',
-      performanceAssessment: language === 'tr' ? "Analiz sırasında hata oluştu." : "An error occurred during analysis."
-    };
+    console.error("Gemini API Full Error:", error);
+    throw new Error("Analiz sırasında bir hata oluştu. Lütfen tekrar deneyin.");
   }
 }
